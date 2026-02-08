@@ -195,9 +195,15 @@ function fmtGeneric(v) {
   return t === Math.floor(t) ? Math.floor(t).toLocaleString() : trunc(v, 3).toLocaleString(undefined, {maximumFractionDigits:3});
 }
 
-function fmtVal(v, unit) {
+function fmtMargin1(v, unit) {
   if (v === null || v === undefined) return '<span class="mu">-</span>';
-  return `<span>${v.toFixed(2)}${unit}</span>`;
+  const cls = v > 0 ? 'pos' : v < 0 ? 'neg' : 'mu';
+  return `<span class="${cls}">${v.toFixed(1)}${unit}</span>`;
+}
+
+function fmtVal1(v, unit) {
+  if (v === null || v === undefined) return '<span class="mu">-</span>';
+  return `<span>${v.toFixed(1)}${unit}</span>`;
 }
 
 function colorWrap(text) {
@@ -266,13 +272,13 @@ function renderTable() {
       <td class="code-cell">${r.code}</td>
       <td><span class="company-link" data-idx="${i}" data-detail="${r.detail}">${r.company}</span></td>
       <td class="title-cell">${escapeHtml(r.title)}</td>
-      <td class="nm">${fmtMargin(r.rev_chg, '%')}</td>
+      <td class="nm">${fmtMargin1(r.rev_chg, '%')}</td>
       <td class="nm">${fmtMargin(r.op_cur, '%')}</td>
       <td class="nm">${fmtMargin(r.op_prev, '%')}</td>
       <td class="nm">${fmtMargin(r.op_diff, 'pt')}</td>
-      <td class="nm">${fmtVal(r.pbr, '倍')}</td>
-      <td class="nm">${fmtVal(r.forward_pe, '倍')}</td>
-      <td class="nm">${fmtVal(r.div_yield, '%')}</td>
+      <td class="nm">${fmtVal1(r.pbr, '倍')}</td>
+      <td class="nm">${fmtVal1(r.forward_pe, '倍')}</td>
+      <td class="nm">${fmtVal1(r.div_yield, '%')}</td>
     </tr>`).join('');
 
   // Update header arrows
