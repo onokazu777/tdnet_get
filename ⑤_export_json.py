@@ -274,6 +274,16 @@ def main():
         print(f"[{d}]")
         seen = {}
 
+        # PDFリンク読み込み
+        pdf_links = {}
+        pdf_path = dd / "pdf_links.json"
+        if pdf_path.exists():
+            try:
+                with open(pdf_path, 'r', encoding='utf-8') as f:
+                    pdf_links = json.load(f)
+            except Exception:
+                pass
+
         for xf in sorted(dd.glob("XBRL*_*.xlsx")):
             m = re.match(r'XBRL[^_]*_([^_]+)_(.+)', xf.stem)
             if not m:
@@ -292,7 +302,7 @@ def main():
             # サマリー情報取得
             s = read_summary(xf)
 
-            index_entries.append({
+            entry = {
                 'date': f"{d[:4]}/{d[4:6]}/{d[6:]}",
                 'date_raw': d,
                 'code': code,
@@ -303,7 +313,11 @@ def main():
                 'op_prev': safe_val(s['op_prev']),
                 'op_diff': safe_val(s['op_diff']),
                 'detail': detail_name,
-            })
+            }
+            # PDFリンクがあれば追加
+            if code in pdf_links:
+                entry['pdf_url'] = pdf_links[code]
+            index_entries.append(entry)
 
             # 詳細JSON生成（更新チェック）
             detail_path = DETAIL_DIR / detail_name

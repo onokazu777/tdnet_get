@@ -75,8 +75,8 @@ jobs:
                   existing.append(entry)
                   added += 1
               else:
-                  # 既存エントリの株価指標を更新
-                  for k in ('pbr', 'forward_pe', 'div_yield'):
+                  # 既存エントリの株価指標・PDFリンクを更新
+                  for k in ('pbr', 'forward_pe', 'div_yield', 'pdf_url'):
                       if k in entry:
                           existing_map[entry['detail']][k] = entry[k]
 

@@ -370,16 +370,17 @@ def find_xbrl_links(session, target_date_str, code_filter=None):
             if code_filter and code4 != str(code_filter):
                 continue
 
-            # XBRLリンク探索: 全カラムから .zip リンクを探す
+            # XBRLリンク・PDFリンク探索: 全カラムからリンクを探す
             xbrl_url = None
+            pdf_url = None
             for col in cols:
                 for a_tag in col.find_all("a", href=True):
                     href = a_tag.get("href", "")
-                    if href.lower().endswith(".zip"):
+                    href_lower = href.lower()
+                    if href_lower.endswith(".zip") and not xbrl_url:
                         xbrl_url = urljoin(target_url, href)
-                        break
-                if xbrl_url:
-                    break
+                    elif href_lower.endswith(".pdf") and not pdf_url:
+                        pdf_url = urljoin(target_url, href)
 
             if xbrl_url:
                 results.append({
@@ -388,6 +389,7 @@ def find_xbrl_links(session, target_date_str, code_filter=None):
                     "name": r_name,
                     "title": r_title,
                     "xbrl_url": xbrl_url,
+                    "pdf_url": pdf_url,
                 })
                 found_in_page += 1
 
@@ -1260,6 +1262,18 @@ def main():
             continue
 
         print(f"   📦 XBRL対象: {len(xbrl_entries)} 件")
+
+        # PDFリンクをJSON保存
+        pdf_links = {}
+        for e in xbrl_entries:
+            if e.get("pdf_url"):
+                pdf_links[e["code"]] = e["pdf_url"]
+        if pdf_links:
+            import json as _json
+            pdf_path = day_dir / "pdf_links.json"
+            with open(pdf_path, 'w', encoding='utf-8') as _f:
+                _json.dump(pdf_links, _f, ensure_ascii=False, indent=2)
+            print(f"   📎 PDFリンク保存: {len(pdf_links)} 件")
 
         for entry in xbrl_entries:
             code = entry["code"]
