@@ -24,16 +24,19 @@ DETAIL_DIR = DATA_DIR / "detail"
 
 # 売上高/営業収益として認識するラベル（日本語ラベルおよびXBRL要素名）
 SALES_LABELS = {
-    '売上高', '売上収益（IFRS）', '営業収益', '経常収益',
-    'NetSales', 'Revenue', 'OperatingRevenue1',
+    '売上高', '売上収益（IFRS）', '営業収益', '経常収益', '経常収益（保険）',
+    'NetSales', 'NetSalesIFRS', 'Revenue', 'OperatingRevenue1',
     'OperatingRevenues', 'OperatingRevenuesIFRS',
-    'OrdinaryRevenuesBK',
+    'OperatingRevenuesSpecific', 'OperatingRevenuesSE',
+    'OrdinaryRevenuesBK', 'OrdinaryRevenuesIN',
 }
 
 # 売上高の増減率として認識するラベル
 SALES_CHANGE_LABELS = {
-    'ChangeInNetSales', 'ChangeInOperatingRevenues',
-    'ChangeInOperatingRevenuesIFRS', 'ChangeInOrdinaryRevenuesBK',
+    'ChangeInNetSales', 'ChangeInNetSalesIFRS',
+    'ChangeInOperatingRevenues', 'ChangeInOperatingRevenuesIFRS',
+    'ChangeInOperatingRevenuesSpecific', 'ChangeInOperatingRevenuesSE',
+    'ChangeInOrdinaryRevenuesBK', 'ChangeInOrdinaryRevenuesIN',
 }
 
 

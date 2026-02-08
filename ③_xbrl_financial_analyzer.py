@@ -137,7 +137,9 @@ XBRL_LABEL_MAP = {
     # --- 営業収益・経常収益（業種別） ---
     "OperatingRevenue1": "営業収益",
     "OrdinaryRevenuesBK": "経常収益",
+    "OrdinaryRevenuesIN": "経常収益（保険）",
     "ChangeInOrdinaryRevenuesBK": "経常収益増減率",
+    "ChangeInOrdinaryRevenuesIN": "経常収益増減率（保険）",
 
     # --- 会社情報 (DEI) ---
     "FilerNameInJapaneseDEI": "提出者名",
@@ -220,11 +222,20 @@ TSE_ELEMENT_MAP = {
     # --- 営業収益（運輸・物流・卸売等）---
     "OperatingRevenues": "OperatingRevenue1",
     "OperatingRevenuesIFRS": "OperatingRevenue1",
+    "OperatingRevenuesSpecific": "OperatingRevenue1",
+    "OperatingRevenuesSE": "OperatingRevenue1",
     "ChangeInOperatingRevenues": "ChangeInNetSales",
     "ChangeInOperatingRevenuesIFRS": "ChangeInNetSales",
-    # --- 銀行業 ---
+    "ChangeInOperatingRevenuesSpecific": "ChangeInNetSales",
+    "ChangeInOperatingRevenuesSE": "ChangeInNetSales",
+    # --- IFRS売上高 ---
+    "NetSalesIFRS": "NetSales",
+    "ChangeInNetSalesIFRS": "ChangeInNetSales",
+    # --- 銀行業・保険業 ---
     "OrdinaryRevenuesBK": "OrdinaryRevenuesBK",
     "ChangeInOrdinaryRevenuesBK": "ChangeInOrdinaryRevenuesBK",
+    "OrdinaryRevenuesIN": "OrdinaryRevenuesIN",
+    "ChangeInOrdinaryRevenuesIN": "ChangeInOrdinaryRevenuesIN",
 }
 
 
@@ -887,7 +898,7 @@ def calculate_profit_margins(summary_df: pd.DataFrame) -> pd.DataFrame:
     sales_current = None
     sales_prior = None
 
-    for sales_elem in ["NetSales", "Revenue", "OperatingRevenue1", "OrdinaryRevenuesBK"]:
+    for sales_elem in ["NetSales", "Revenue", "OperatingRevenue1", "OrdinaryRevenuesBK", "OrdinaryRevenuesIN"]:
         row = summary_df[summary_df["要素名"] == sales_elem]
         if not row.empty and row.iloc[0]["当期"] is not None:
             sales_current = row.iloc[0]["当期"]
