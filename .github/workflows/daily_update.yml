@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pandas beautifulsoup4 lxml openpyxl
+        run: pip install requests pandas beautifulsoup4 lxml openpyxl yfinance
 
       # ── 3. 今日の日付（JST） ──
       - name: Set today's date
@@ -68,12 +68,17 @@ jobs:
               new_entries = json.load(f)
 
           # 重複チェック（detailファイル名で判定）してマージ
-          existing_keys = {e['detail'] for e in existing}
+          existing_map = {e['detail']: e for e in existing}
           added = 0
           for entry in new_entries:
-              if entry['detail'] not in existing_keys:
+              if entry['detail'] not in existing_map:
                   existing.append(entry)
                   added += 1
+              else:
+                  # 既存エントリの株価指標を更新
+                  for k in ('pbr', 'forward_pe', 'div_yield'):
+                      if k in entry:
+                          existing_map[entry['detail']][k] = entry[k]
 
           print(f'Existing: {len(existing) - added}, New: {added}, Total: {len(existing)}')
 

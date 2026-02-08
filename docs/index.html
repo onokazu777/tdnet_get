@@ -93,6 +93,12 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
     <option value="op_cur_asc">営利 当期% ↑低い順</option>
     <option value="op_diff_desc">営利 差分pt ↓高い順</option>
     <option value="op_diff_asc">営利 差分pt ↑低い順</option>
+    <option value="pbr_asc">PBR ↑低い順</option>
+    <option value="pbr_desc">PBR ↓高い順</option>
+    <option value="forward_pe_asc">予想PER ↑低い順</option>
+    <option value="forward_pe_desc">予想PER ↓高い順</option>
+    <option value="div_yield_desc">配当利回り ↓高い順</option>
+    <option value="div_yield_asc">配当利回り ↑低い順</option>
   </select>
   <input type="text" id="searchInput" placeholder="会社名・コード・表題で検索...">
   <select id="dateSelect"><option value="">全日付</option></select>
@@ -111,6 +117,9 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
       <th class="sortable" data-col="op_cur" style="text-align:right">営利 当期%</th>
       <th class="sortable" data-col="op_prev" style="text-align:right">営利 前期%</th>
       <th class="sortable" data-col="op_diff" style="text-align:right">営利 差分pt</th>
+      <th class="sortable" data-col="pbr" style="text-align:right">PBR</th>
+      <th class="sortable" data-col="forward_pe" style="text-align:right">予想PER</th>
+      <th class="sortable" data-col="div_yield" style="text-align:right">配当利回り</th>
     </tr></thead>
     <tbody id="tbody"></tbody>
   </table>
@@ -186,6 +195,11 @@ function fmtGeneric(v) {
   return t === Math.floor(t) ? Math.floor(t).toLocaleString() : trunc(v, 3).toLocaleString(undefined, {maximumFractionDigits:3});
 }
 
+function fmtVal(v, unit) {
+  if (v === null || v === undefined) return '<span class="mu">-</span>';
+  return `<span>${v.toFixed(2)}${unit}</span>`;
+}
+
 function colorWrap(text) {
   const s = String(text).replace(/,/g, '').replace(/%/g, '').replace(/pt/g, '').trim();
   if (!s || s === '-') return text;
@@ -207,6 +221,9 @@ function getSort(key) {
     'op_cur': d => d.op_cur,
     'op_prev': d => d.op_prev,
     'op_diff': d => d.op_diff,
+    'pbr': d => d.pbr,
+    'forward_pe': d => d.forward_pe,
+    'div_yield': d => d.div_yield,
   };
   return map[key] || (d => d.date_raw);
 }
@@ -253,6 +270,9 @@ function renderTable() {
       <td class="nm">${fmtMargin(r.op_cur, '%')}</td>
       <td class="nm">${fmtMargin(r.op_prev, '%')}</td>
       <td class="nm">${fmtMargin(r.op_diff, 'pt')}</td>
+      <td class="nm">${fmtVal(r.pbr, '倍')}</td>
+      <td class="nm">${fmtVal(r.forward_pe, '倍')}</td>
+      <td class="nm">${fmtVal(r.div_yield, '%')}</td>
     </tr>`).join('');
 
   // Update header arrows

@@ -2,14 +2,16 @@
 """
 XBRL分析ExcelファイルをJSON形式にエクスポートする。
 GitHub Pages公開用の index.json（一覧）と詳細JSONを生成。
+yfinanceで株価指標（PBR, 予想PER, 配当利回り）も取得。
 
 Usage:
   python "⑤_export_json.py"
   python "⑤_export_json.py" --force          # 全ファイル再生成
   python "⑤_export_json.py" --target 20260206 # 特定日付のみ
+  python "⑤_export_json.py" --skip-stock     # 株価指標取得をスキップ
 """
 
-import os, sys, re, json, math, argparse
+import os, sys, re, json, math, argparse, time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8')
@@ -163,10 +165,92 @@ def read_all_sheets(p):
     return sheets
 
 
+def fetch_stock_data(codes):
+    """
+    yfinanceで株価指標を一括取得する。
+    codes: ユニークな証券コードのリスト
+    Returns: {code: {pbr, forward_pe, trailing_pe, div_yield, price, market_cap}}
+    """
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("  Warning: yfinance未インストール。株価指標はスキップします。")
+        print("  pip install yfinance でインストールしてください。")
+        return {}
+
+    result = {}
+    total = len(codes)
+    print(f"\n株価指標を取得中... ({total} 銘柄)")
+
+    for i, code in enumerate(codes):
+        if (i + 1) % 20 == 0 or i == 0:
+            print(f"  [{i+1}/{total}] {code}.T ...")
+        try:
+            ticker = yf.Ticker(f"{code}.T")
+            info = ticker.info
+
+            def safe_round(v, n=2):
+                if v is None:
+                    return None
+                try:
+                    f = float(v)
+                    return round(f, n) if not (math.isnan(f) or math.isinf(f)) else None
+                except (ValueError, TypeError):
+                    return None
+
+            result[code] = {
+                'pbr': safe_round(info.get('priceToBook')),
+                'forward_pe': safe_round(info.get('forwardPE'), 1),
+                'trailing_pe': safe_round(info.get('trailingPE'), 1),
+                'div_yield': safe_round(info.get('dividendYield')),
+                'price': safe_round(info.get('currentPrice'), 0),
+                'market_cap': info.get('marketCap'),
+            }
+        except Exception as e:
+            print(f"  Warning ({code}): {e}")
+            result[code] = {}
+
+        # レート制限対策（軽い間隔）
+        if (i + 1) % 5 == 0:
+            time.sleep(0.5)
+
+    print(f"  取得完了: {len(result)} 銘柄")
+    return result
+
+
+def load_stock_cache():
+    """株価キャッシュを読み込む（当日分のみ有効）"""
+    cache_path = DATA_DIR / "stock_cache.json"
+    if cache_path.exists():
+        try:
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                cache = json.load(f)
+            # 当日のキャッシュのみ有効
+            import datetime
+            today = datetime.date.today().strftime('%Y%m%d')
+            if cache.get('_date') == today:
+                print(f"  株価キャッシュ使用 ({today}, {len(cache) - 1} 銘柄)")
+                return cache
+        except Exception:
+            pass
+    return {}
+
+
+def save_stock_cache(stock_data):
+    """株価キャッシュを保存"""
+    import datetime
+    cache = dict(stock_data)
+    cache['_date'] = datetime.date.today().strftime('%Y%m%d')
+    cache_path = DATA_DIR / "stock_cache.json"
+    with open(cache_path, 'w', encoding='utf-8') as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Excel→JSON変換")
     parser.add_argument("--force", action="store_true", help="全ファイルを再生成")
     parser.add_argument("--target", type=str, help="特定日付のみ処理 (例: 20260206)")
+    parser.add_argument("--skip-stock", action="store_true", help="株価指標取得をスキップ")
     args = parser.parse_args()
 
     root = Path(DATA_ROOT)
@@ -240,6 +324,31 @@ def main():
                     print(f"  ERROR {xf.name}: {e}")
             else:
                 skipped += 1
+
+    # --- 株価指標の取得 ---
+    if not args.skip_stock and index_entries:
+        # ユニークなコードを収集（数字4桁のみ対象）
+        unique_codes = sorted({e['code'] for e in index_entries
+                               if re.fullmatch(r'\d{4}', e['code'])})
+
+        # キャッシュ確認
+        stock_cache = load_stock_cache()
+        codes_to_fetch = [c for c in unique_codes if c not in stock_cache]
+
+        if codes_to_fetch:
+            new_data = fetch_stock_data(codes_to_fetch)
+            stock_cache.update(new_data)
+            save_stock_cache(stock_cache)
+        else:
+            print(f"  株価データ: 全銘柄キャッシュ済み")
+
+        # index_entries に株価データをマージ
+        for entry in index_entries:
+            sd = stock_cache.get(entry['code'], {})
+            if isinstance(sd, dict) and '_date' not in sd:
+                entry['pbr'] = sd.get('pbr')
+                entry['forward_pe'] = sd.get('forward_pe')
+                entry['div_yield'] = sd.get('div_yield')
 
     # index.json出力（常に再生成）
     index_path = DATA_DIR / "index.json"
