@@ -1,0 +1,109 @@
+name: Daily XBRL Update
+
+on:
+  schedule:
+    # JST 17:00, 20:00, 23:55 (UTC 08:00, 11:00, 14:55)
+    - cron: '0 8 * * *'
+    - cron: '0 11 * * *'
+    - cron: '55 14 * * *'
+  workflow_dispatch:  # 手動実行ボタン
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Tokyo
+
+    steps:
+      # ── 1. スクリプトを取得（このリポジトリ = tdnet_get） ──
+      - uses: actions/checkout@v4
+
+      # ── 2. Python セットアップ ──
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests pandas beautifulsoup4 lxml openpyxl
+
+      # ── 3. 今日の日付（JST） ──
+      - name: Set today's date
+        run: echo "TODAY=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+      # ── 4. ③ XBRL取得 & 分析 → Excel生成 ──
+      - name: Run XBRL analyzer
+        run: |
+          python "③_xbrl_financial_analyzer.py" \
+            --target "$TODAY" \
+            --save-root ./xbrl_tmp
+
+      # ── 5. viewer リポジトリをクローン（既存データ取得） ──
+      - name: Clone viewer repo
+        run: |
+          git clone https://x-access-token:${{ secrets.VIEWER_PAT }}@github.com/onokazu777/tdnet-viewer.git viewer
+
+      # ── 6. ⑤ JSON変換（新規分のみ） ──
+      - name: Export JSON
+        env:
+          XBRL_DATA_ROOT: ./xbrl_tmp
+        run: python "⑤_export_json.py"
+
+      # ── 7. 既存 index.json とマージ ──
+      - name: Merge index and copy detail JSONs
+        run: |
+          python -c "
+          import json, shutil, os
+
+          # 既存データ読み込み
+          with open('viewer/data/index.json', 'r', encoding='utf-8') as f:
+              existing = json.load(f)
+
+          # 新規データ読み込み
+          new_index = 'docs/data/index.json'
+          if not os.path.exists(new_index):
+              print('No new data generated')
+              exit(0)
+
+          with open(new_index, 'r', encoding='utf-8') as f:
+              new_entries = json.load(f)
+
+          # 重複チェック（detailファイル名で判定）してマージ
+          existing_keys = {e['detail'] for e in existing}
+          added = 0
+          for entry in new_entries:
+              if entry['detail'] not in existing_keys:
+                  existing.append(entry)
+                  added += 1
+
+          print(f'Existing: {len(existing) - added}, New: {added}, Total: {len(existing)}')
+
+          # index.json 更新
+          with open('viewer/data/index.json', 'w', encoding='utf-8') as f:
+              json.dump(existing, f, ensure_ascii=False, indent=2)
+
+          # 詳細JSONをコピー
+          src_dir = 'docs/data/detail'
+          dst_dir = 'viewer/data/detail'
+          os.makedirs(dst_dir, exist_ok=True)
+          if os.path.exists(src_dir):
+              for fn in os.listdir(src_dir):
+                  src = os.path.join(src_dir, fn)
+                  dst = os.path.join(dst_dir, fn)
+                  if not os.path.exists(dst):
+                      shutil.copy2(src, dst)
+          "
+
+      # ── 8. viewer リポジトリにpush ──
+      - name: Push to viewer repo
+        run: |
+          cd viewer
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No new data for $TODAY"
+          else
+            git commit -m "Auto update: $TODAY"
+            git push
+            echo "Pushed new data for $TODAY"
+          fi
