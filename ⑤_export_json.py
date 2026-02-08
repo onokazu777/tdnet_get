@@ -22,7 +22,19 @@ DOCS_DIR = Path(__file__).parent / "docs"
 DATA_DIR = DOCS_DIR / "data"
 DETAIL_DIR = DATA_DIR / "detail"
 
-SALES_LABELS = {'売上高', '売上収益（IFRS）', '営業収益'}
+# 売上高/営業収益として認識するラベル（日本語ラベルおよびXBRL要素名）
+SALES_LABELS = {
+    '売上高', '売上収益（IFRS）', '営業収益', '経常収益',
+    'NetSales', 'Revenue', 'OperatingRevenue1',
+    'OperatingRevenues', 'OperatingRevenuesIFRS',
+    'OrdinaryRevenuesBK',
+}
+
+# 売上高の増減率として認識するラベル
+SALES_CHANGE_LABELS = {
+    'ChangeInNetSales', 'ChangeInOperatingRevenues',
+    'ChangeInOperatingRevenuesIFRS', 'ChangeInOrdinaryRevenuesBK',
+}
 
 
 def safe_val(v):
@@ -45,6 +57,7 @@ def read_summary(p):
         ws = wb[wb.sheetnames[0]]
         info['title'] = str(ws.cell(row=3, column=2).value or '')
 
+        # --- 営業利益率をSheet1から探す ---
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, max_col=4):
             if '営業利益率' in str(row[0].value or ''):
                 for k, i in [('op_cur', 1), ('op_prev', 2), ('op_diff', 3)]:
@@ -52,26 +65,78 @@ def read_summary(p):
                     info[k] = round(float(v), 2) if v is not None else None
                 break
 
-        # 売上高の増減率（増収率）
+        # --- 財務データ一覧シートから売上高・営業利益を探す ---
+        sales_cur = None
+        sales_prev = None
+        op_income_cur = None
+        op_income_prev = None
+
         for sn in wb.sheetnames[1:]:
             ws2 = wb[sn]
             hdr = [str(c.value or '') for c in next(ws2.iter_rows(min_row=1, max_row=1))]
-            ri = None
+
+            # ヘッダーから列インデックスを特定
+            col_map = {}
             for i, h in enumerate(hdr):
-                if '増減率' in h:
-                    ri = i
-                    break
-            if ri is None:
+                if '当期' in h and '増減' not in h:
+                    col_map['cur'] = i
+                elif '前期' in h and '増減' not in h:
+                    col_map['prev'] = i
+                elif '増減率' in h:
+                    col_map['rate'] = i
+
+            if not col_map:
                 continue
+
             for row in ws2.iter_rows(min_row=2, max_row=ws2.max_row):
                 label = str(row[0].value or '').strip()
-                if label in SALES_LABELS:
-                    v = row[ri].value
-                    if v is not None:
-                        info['rev_chg'] = round(float(v) * 100, 2)
-                    break
+
+                # 売上高の増減率（増収率）
+                if info['rev_chg'] is None:
+                    if label in SALES_LABELS:
+                        if 'rate' in col_map:
+                            v = row[col_map['rate']].value
+                            if v is not None:
+                                info['rev_chg'] = round(float(v) * 100, 2)
+                        # 売上高の当期/前期も記録（利益率計算用）
+                        if 'cur' in col_map:
+                            v = row[col_map['cur']].value
+                            if v is not None:
+                                sales_cur = float(v)
+                        if 'prev' in col_map:
+                            v = row[col_map['prev']].value
+                            if v is not None:
+                                sales_prev = float(v)
+                    elif label in SALES_CHANGE_LABELS:
+                        # 増減率が直接格納されている場合（当期列に率が入っている）
+                        if 'cur' in col_map:
+                            v = row[col_map['cur']].value
+                            if v is not None and info['rev_chg'] is None:
+                                info['rev_chg'] = round(float(v) * 100, 2)
+
+                # 営業利益
+                if label in ('営業利益', 'OperatingIncome'):
+                    if 'cur' in col_map:
+                        v = row[col_map['cur']].value
+                        if v is not None:
+                            op_income_cur = float(v)
+                    if 'prev' in col_map:
+                        v = row[col_map['prev']].value
+                        if v is not None:
+                            op_income_prev = float(v)
+
+            # 見つかったら次のシートは不要
             if info['rev_chg'] is not None:
                 break
+
+        # --- 営業利益率がSheet1になかった場合、自力計算 ---
+        if info['op_cur'] is None and sales_cur and sales_cur != 0 and op_income_cur is not None:
+            info['op_cur'] = round(op_income_cur / sales_cur * 100, 2)
+        if info['op_prev'] is None and sales_prev and sales_prev != 0 and op_income_prev is not None:
+            info['op_prev'] = round(op_income_prev / sales_prev * 100, 2)
+        if info['op_cur'] is not None and info['op_prev'] is not None and info['op_diff'] is None:
+            info['op_diff'] = round(info['op_cur'] - info['op_prev'], 2)
+
         wb.close()
     except Exception as e:
         print(f"  Warning (summary): {e}")

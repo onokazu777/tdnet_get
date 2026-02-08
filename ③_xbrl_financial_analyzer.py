@@ -134,6 +134,11 @@ XBRL_LABEL_MAP = {
     "RateOfReturnOnEquity": "自己資本利益率ROE（%）",
     "PriceEarningsRatio": "株価収益率PER（倍）",
 
+    # --- 営業収益・経常収益（業種別） ---
+    "OperatingRevenue1": "営業収益",
+    "OrdinaryRevenuesBK": "経常収益",
+    "ChangeInOrdinaryRevenuesBK": "経常収益増減率",
+
     # --- 会社情報 (DEI) ---
     "FilerNameInJapaneseDEI": "提出者名",
     "SecurityCodeDEI": "証券コード",
@@ -212,6 +217,14 @@ TSE_ELEMENT_MAP = {
     "TotalEquityIFRS": "NetAssets",
     "EquityAttributableToOwnersOfParentIFRS": "ShareholdersEquity",
     "EquityAttributableToOwnersOfParentToTotalAssetsRatioIFRS": "EquityToAssetRatio",
+    # --- 営業収益（運輸・物流・卸売等）---
+    "OperatingRevenues": "OperatingRevenue1",
+    "OperatingRevenuesIFRS": "OperatingRevenue1",
+    "ChangeInOperatingRevenues": "ChangeInNetSales",
+    "ChangeInOperatingRevenuesIFRS": "ChangeInNetSales",
+    # --- 銀行業 ---
+    "OrdinaryRevenuesBK": "OrdinaryRevenuesBK",
+    "ChangeInOrdinaryRevenuesBK": "ChangeInOrdinaryRevenuesBK",
 }
 
 
@@ -870,11 +883,11 @@ def calculate_profit_margins(summary_df: pd.DataFrame) -> pd.DataFrame:
     if summary_df.empty:
         return pd.DataFrame()
 
-    # 売上高を取得（NetSales → Revenue → OperatingRevenue1 の順で探す）
+    # 売上高を取得（NetSales → Revenue → OperatingRevenue1 → OrdinaryRevenuesBK の順で探す）
     sales_current = None
     sales_prior = None
 
-    for sales_elem in ["NetSales", "Revenue", "OperatingRevenue1"]:
+    for sales_elem in ["NetSales", "Revenue", "OperatingRevenue1", "OrdinaryRevenuesBK"]:
         row = summary_df[summary_df["要素名"] == sales_elem]
         if not row.empty and row.iloc[0]["当期"] is not None:
             sales_current = row.iloc[0]["当期"]
