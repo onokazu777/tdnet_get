@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XBRL Financial Viewer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Segoe UI","Meiryo",sans-serif;background:#0e1117;color:#e0e0e0;line-height:1.5}
+a{color:#53b8f0;text-decoration:none}
+a:hover{color:#e94560;text-decoration:underline}
+
+/* ─── Header ─── */
+.header{padding:12px 24px;border-bottom:2px solid #1e2a3a}
+.header h1{font-size:1.3rem;color:#fff}
+
+/* ─── Controls ─── */
+.controls{display:flex;gap:12px;padding:12px 24px;flex-wrap:wrap;align-items:center}
+.controls input,.controls select{
+  background:#1e2a3a;color:#e0e0e0;border:1px solid #2a3a5a;
+  padding:7px 12px;border-radius:4px;font-size:13px;outline:none}
+.controls input:focus,.controls select:focus{border-color:#53b8f0}
+.controls input{flex:1;min-width:200px}
+.controls select{min-width:140px}
+
+/* ─── Info ─── */
+.info{padding:4px 24px;font-size:12px;color:#888}
+
+/* ─── Table ─── */
+.table-wrap{max-height:720px;overflow-y:auto;margin:0 24px 24px;border-radius:4px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{position:sticky;top:0;background:#0f3460;color:#fff;padding:9px 12px;
+  text-align:left;font-weight:600;border-bottom:2px solid #e94560;z-index:1;white-space:nowrap;cursor:default}
+thead th.sortable{cursor:pointer}
+thead th.sortable:hover{color:#e94560}
+tbody tr{border-bottom:1px solid #2a2a4a;transition:background .12s}
+tbody tr:hover{background:#1e2a4a}
+tbody td{padding:7px 12px}
+td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Menlo,monospace;font-size:12px}
+.pos{color:#51cf66}.neg{color:#ff6b6b}.mu{color:#666}
+.company-link{color:#53b8f0;font-weight:500;cursor:pointer}
+.company-link:hover{color:#e94560;text-decoration:underline}
+.date-cell{color:#8899aa;white-space:nowrap}
+.code-cell{font-weight:600}
+.title-cell{color:#b0b0c0;font-size:12px}
+
+/* ─── Modal ─── */
+.modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,.65);z-index:1000;justify-content:center;align-items:flex-start;padding:40px 20px}
+.modal-overlay.active{display:flex}
+.modal-box{background:#16213e;border:1px solid #2a3a5a;border-radius:8px;
+  width:100%;max-width:1100px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.5)}
+.modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:16px 20px;border-bottom:1px solid #2a3a5a}
+.modal-header-left h3{font-size:1.05rem;color:#fff;margin-bottom:2px}
+.modal-header-left .subtitle{font-size:.8rem;color:#888}
+.modal-close{background:#e94560;color:#fff;border:none;padding:6px 16px;border-radius:4px;cursor:pointer;font-size:13px;white-space:nowrap}
+.modal-close:hover{background:#c73e54}
+
+/* ─── Tabs ─── */
+.tabs{display:flex;gap:0;border-bottom:2px solid #2a3a5a;padding:0 20px}
+.tab-btn{padding:8px 18px;background:none;border:none;color:#888;cursor:pointer;font-size:13px;
+  border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab-btn:hover{color:#e0e0e0}
+.tab-btn.active{color:#53b8f0;border-bottom-color:#53b8f0}
+
+/* ─── Modal Body ─── */
+.modal-body{overflow-y:auto;padding:16px 20px;flex:1}
+.section-hdr{font-size:.95rem;font-weight:700;margin:.8rem 0 .3rem}
+.note-sm{font-size:.75rem;color:#888;margin-bottom:.3rem}
+.ci-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:12px}
+.ci-item strong{font-size:.75rem;color:#888}
+.ci-item span{display:block;font-size:.9rem}
+.detail-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:12px}
+.detail-table th{background:#0f3460;color:#fff;padding:6px 10px;text-align:left;font-weight:600;white-space:nowrap}
+.detail-table td{padding:5px 10px;border-bottom:1px solid #2a2a4a}
+.detail-table td.r{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Menlo,monospace}
+.divider{border:none;border-top:1px solid #2a3a5a;margin:12px 0}
+</style>
+</head>
+<body>
+
+<div class="header"><h1>XBRL Financial Viewer</h1></div>
+
+<div class="controls">
+  <select id="sortSelect">
+    <option value="_date_desc">日付 ↓新しい順</option>
+    <option value="_date_asc">日付 ↑古い順</option>
+    <option value="code_asc">コード ↑昇順</option>
+    <option value="code_desc">コード ↓降順</option>
+    <option value="rev_chg_desc">増収率% ↓高い順</option>
+    <option value="rev_chg_asc">増収率% ↑低い順</option>
+    <option value="op_cur_desc">営利 当期% ↓高い順</option>
+    <option value="op_cur_asc">営利 当期% ↑低い順</option>
+    <option value="op_diff_desc">営利 差分pt ↓高い順</option>
+    <option value="op_diff_asc">営利 差分pt ↑低い順</option>
+  </select>
+  <input type="text" id="searchInput" placeholder="会社名・コード・表題で検索...">
+  <select id="dateSelect"><option value="">全日付</option></select>
+</div>
+
+<div class="info" id="info"></div>
+
+<div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th class="sortable" data-col="_date">日付</th>
+      <th class="sortable" data-col="code">コード</th>
+      <th>会社名</th>
+      <th>表題</th>
+      <th class="sortable" data-col="rev_chg" style="text-align:right">増収率%</th>
+      <th class="sortable" data-col="op_cur" style="text-align:right">営利 当期%</th>
+      <th class="sortable" data-col="op_prev" style="text-align:right">営利 前期%</th>
+      <th class="sortable" data-col="op_diff" style="text-align:right">営利 差分pt</th>
+    </tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-header-left">
+        <h3 id="modalTitle"></h3>
+        <div class="subtitle" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" id="modalClose">✕ 閉じる</button>
+    </div>
+    <div class="tabs" id="modalTabs"></div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   State
+   ============================================================ */
+let DATA = [];
+let sortCol = '_date', sortAsc = false;
+const detailCache = {};
+
+/* ============================================================
+   Number formatting
+   ============================================================ */
+function trunc(v, d = 3) {
+  const f = Math.pow(10, d);
+  return v >= 0 ? Math.floor(v * f) / f : Math.ceil(v * f) / f;
+}
+
+function fmtMargin(v, unit) {
+  if (v === null || v === undefined) return '<span class="mu">-</span>';
+  const cls = v > 0 ? 'pos' : v < 0 ? 'neg' : 'mu';
+  return `<span class="${cls}">${v.toFixed(2)}${unit}</span>`;
+}
+
+function fmtAmount(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v !== 'number') return String(v);
+  if (!isFinite(v)) return '';
+  if (v === Math.floor(v) && Math.abs(v) >= 1000000) {
+    return (Math.floor(v) / 1000000).toLocaleString();
+  }
+  const t = trunc(v);
+  return t === Math.floor(t) ? t.toLocaleString() : trunc(v, 3).toLocaleString(undefined, {maximumFractionDigits:3});
+}
+
+function fmtRate(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v !== 'number') return String(v);
+  if (!isFinite(v)) return '';
+  return trunc(v * 100, 2).toFixed(2) + '%';
+}
+
+function fmtPct(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v !== 'number') return String(v);
+  if (!isFinite(v)) return '';
+  return trunc(v, 2).toFixed(2);
+}
+
+function fmtGeneric(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v !== 'number') return String(v);
+  if (!isFinite(v)) return '';
+  const t = trunc(v);
+  return t === Math.floor(t) ? Math.floor(t).toLocaleString() : trunc(v, 3).toLocaleString(undefined, {maximumFractionDigits:3});
+}
+
+function colorWrap(text) {
+  const s = String(text).replace(/,/g, '').replace(/%/g, '').replace(/pt/g, '').trim();
+  if (!s || s === '-') return text;
+  const n = parseFloat(s);
+  if (isNaN(n)) return text;
+  if (n < 0) return `<span class="neg">${text}</span>`;
+  if (n > 0) return `<span class="pos">${text}</span>`;
+  return text;
+}
+
+/* ============================================================
+   Data helpers
+   ============================================================ */
+function getSort(key) {
+  const map = {
+    '_date': d => d.date_raw,
+    'code': d => d.code,
+    'rev_chg': d => d.rev_chg,
+    'op_cur': d => d.op_cur,
+    'op_prev': d => d.op_prev,
+    'op_diff': d => d.op_diff,
+  };
+  return map[key] || (d => d.date_raw);
+}
+
+function compare(a, b) {
+  if (a === null || a === undefined) return 1;
+  if (b === null || b === undefined) return -1;
+  if (typeof a === 'number' && typeof b === 'number') return a - b;
+  return String(a).localeCompare(String(b));
+}
+
+function filterAndSort() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const dateVal = document.getElementById('dateSelect').value;
+  let d = DATA.slice();
+  if (dateVal) d = d.filter(r => r.date_raw === dateVal);
+  if (search) d = d.filter(r =>
+    r.company.toLowerCase().includes(search) ||
+    r.code.toLowerCase().includes(search) ||
+    r.title.toLowerCase().includes(search));
+  const fn = getSort(sortCol);
+  d.sort((a, b) => {
+    const r = compare(fn(a), fn(b));
+    return sortAsc ? r : -r;
+  });
+  return d;
+}
+
+/* ============================================================
+   Render list
+   ============================================================ */
+function renderTable() {
+  const rows = filterAndSort();
+  document.getElementById('info').textContent =
+    `${rows.length} / ${DATA.length} 件 — 会社名クリックで詳細 / ヘッダークリックでソート`;
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = rows.map((r, i) =>
+    `<tr>
+      <td class="date-cell">${r.date}</td>
+      <td class="code-cell">${r.code}</td>
+      <td><span class="company-link" data-idx="${i}" data-detail="${r.detail}">${r.company}</span></td>
+      <td class="title-cell">${escapeHtml(r.title)}</td>
+      <td class="nm">${fmtMargin(r.rev_chg, '%')}</td>
+      <td class="nm">${fmtMargin(r.op_cur, '%')}</td>
+      <td class="nm">${fmtMargin(r.op_prev, '%')}</td>
+      <td class="nm">${fmtMargin(r.op_diff, 'pt')}</td>
+    </tr>`).join('');
+
+  // Update header arrows
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    const col = th.dataset.col;
+    let label = th.textContent.replace(/ [↑↓]$/, '');
+    if (col === sortCol) label += sortAsc ? ' ↑' : ' ↓';
+    th.textContent = label;
+  });
+
+  // Sync dropdown
+  const selVal = sortCol + '_' + (sortAsc ? 'asc' : 'desc');
+  const sel = document.getElementById('sortSelect');
+  if (sel.querySelector(`option[value="${selVal}"]`)) sel.value = selVal;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ============================================================
+   Detail modal
+   ============================================================ */
+async function openDetail(entry) {
+  const modal = document.getElementById('modal');
+  document.getElementById('modalTitle').textContent = `${entry.code}　${entry.company}`;
+  document.getElementById('modalSubtitle').textContent = `${entry.date}　|　${entry.title}`;
+  document.getElementById('modalTabs').innerHTML = '';
+  document.getElementById('modalBody').innerHTML = '<p style="padding:20px;color:#888">読み込み中...</p>';
+  modal.classList.add('active');
+
+  let detail;
+  if (detailCache[entry.detail]) {
+    detail = detailCache[entry.detail];
+  } else {
+    try {
+      const res = await fetch('data/detail/' + entry.detail);
+      detail = await res.json();
+      detailCache[entry.detail] = detail;
+    } catch (e) {
+      document.getElementById('modalBody').innerHTML = '<p style="color:#ff6b6b">データ読み込みエラー</p>';
+      return;
+    }
+  }
+
+  const names = Object.keys(detail.sheets);
+  const tabs = document.getElementById('modalTabs');
+  tabs.innerHTML = names.map((n, i) =>
+    `<button class="tab-btn${i === 0 ? ' active' : ''}" data-tab="${i}">${escapeHtml(n)}</button>`).join('');
+
+  renderSheet(detail.sheets, names, 0);
+}
+
+function renderSheet(sheets, names, idx) {
+  const name = names[idx];
+  const rows = sheets[name];
+  const body = document.getElementById('modalBody');
+
+  if (!rows || rows.length === 0) {
+    body.innerHTML = '<p style="color:#888">データなし</p>';
+    return;
+  }
+
+  if (name === '分析サマリー') {
+    body.innerHTML = renderSummarySheet(rows);
+  } else {
+    body.innerHTML = renderDataSheet(rows);
+  }
+}
+
+/* ─── Summary sheet ─── */
+function renderSummarySheet(rows) {
+  const INFO_KEYS = new Set(['会社名', 'コード', '表題', '日付']);
+  const ci = {};
+  const sections = [];
+  let curS = null, curH = null, curD = [];
+
+  for (const row of rows) {
+    const f = (row[0] != null ? String(row[0]).trim() : '');
+    if (INFO_KEYS.has(f)) {
+      ci[f] = row.length > 1 && row[1] != null ? String(row[1]) : '';
+    } else if (f.startsWith('【')) {
+      if (curS && curD.length) sections.push({title: curS, hdr: curH, data: curD});
+      curS = f; curH = null; curD = [];
+    } else if (curS && !curH && row.some(v => v != null && v !== '')) {
+      curH = row.map(v => v != null ? String(v) : '');
+    } else if (curS && curH && row.some(v => v != null && v !== '')) {
+      curD.push(row);
+    }
+  }
+  if (curS && curD.length) sections.push({title: curS, hdr: curH, data: curD});
+
+  let html = '';
+  // Company info
+  if (Object.keys(ci).length) {
+    html += '<div class="ci-grid">';
+    for (const [k, v] of Object.entries(ci)) {
+      html += `<div class="ci-item"><strong>${escapeHtml(k)}</strong><span>${escapeHtml(v)}</span></div>`;
+    }
+    html += '</div><hr class="divider">';
+  }
+
+  // Sections
+  for (const sec of sections) {
+    html += `<div class="section-hdr">${escapeHtml(sec.title)}</div>`;
+    if (!sec.hdr || !sec.data.length) continue;
+
+    // Filter out empty header columns
+    const validIdx = [];
+    for (let i = 0; i < sec.hdr.length; i++) {
+      if (sec.hdr[i] && sec.hdr[i].trim()) validIdx.push(i);
+    }
+    const hdr = validIdx.map(i => sec.hdr[i]);
+    const data = sec.data.map(r => validIdx.map(i => i < r.length ? r[i] : null));
+
+    const hasFinancial = hdr.some(h => h.includes('増減率') || h.includes('当期') || h.includes('前期') || h.includes('（%）') || h.includes('（pt）'));
+    const hasAmount = hdr.some(h => (h.includes('当期') || h.includes('前期')) && !h.includes('（%）') && !h.includes('（pt）'));
+    if (hasFinancial && hasAmount) {
+      html += '<div class="note-sm">※ 金額は百万円単位 / 増減率は%表示</div>';
+    }
+
+    html += buildDetailTable(hdr, data);
+  }
+  return html;
+}
+
+/* ─── Data sheet ─── */
+function renderDataSheet(rows) {
+  if (rows.length < 2) return '<p style="color:#888">データなし</p>';
+  let hdr = rows[0].map((v, i) => v != null ? String(v) : `列${i + 1}`);
+
+  // Filter empty headers
+  const validIdx = [];
+  for (let i = 0; i < hdr.length; i++) {
+    if (hdr[i].trim()) validIdx.push(i);
+  }
+  hdr = validIdx.map(i => hdr[i]);
+  const data = rows.slice(1)
+    .filter(r => r.some(v => v != null && v !== ''))
+    .map(r => validIdx.map(i => i < r.length ? r[i] : null));
+
+  if (!data.length) return '<p style="color:#888">データなし</p>';
+
+  const hasFinancial = hdr.some(h => h.includes('増減率') || h.includes('当期') || h.includes('前期') || h.includes('（%）') || h.includes('（pt）'));
+  const hasAmount = hdr.some(h => (h.includes('当期') || h.includes('前期')) && !h.includes('（%）') && !h.includes('（pt）'));
+
+  let html = '';
+  if (hasFinancial && hasAmount) {
+    html += '<div class="note-sm">※ 金額は百万円単位 / 増減率は%表示</div>';
+  }
+  html += buildDetailTable(hdr, data);
+  return html;
+}
+
+/* ─── Table builder ─── */
+function buildDetailTable(hdr, data) {
+  // Determine column types
+  const colType = hdr.map(h => {
+    if (h.includes('増減率')) return 'rate';
+    if (h.includes('（%）') || h.includes('（pt）')) return 'pct';
+    if ((h.includes('当期') || h.includes('前期') || h.includes('増減額')) && !h.includes('（%）') && !h.includes('（pt）')) return 'amount';
+    return 'generic';
+  });
+  const numCols = new Set();
+  hdr.forEach((h, i) => {
+    if (['当期','前期','増減','差分'].some(k => h.includes(k))) numCols.add(i);
+  });
+
+  let html = '<table class="detail-table"><thead><tr>';
+  hdr.forEach(h => html += `<th>${escapeHtml(h)}</th>`);
+  html += '</tr></thead><tbody>';
+
+  for (const row of data) {
+    html += '<tr>';
+    row.forEach((v, ci) => {
+      const isNum = numCols.has(ci);
+      let txt;
+      if (v === null || v === undefined || v === '') {
+        txt = '';
+      } else if (typeof v === 'number') {
+        switch (colType[ci]) {
+          case 'rate': txt = fmtRate(v); break;
+          case 'pct': txt = fmtPct(v); break;
+          case 'amount': txt = fmtAmount(v); break;
+          default: txt = fmtGeneric(v);
+        }
+      } else {
+        txt = escapeHtml(String(v));
+      }
+      if (isNum && txt) txt = colorWrap(txt);
+      html += `<td${isNum ? ' class="r"' : ''}>${txt}</td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+/* ============================================================
+   Events
+   ============================================================ */
+function init() {
+  // Sort dropdown
+  document.getElementById('sortSelect').addEventListener('change', e => {
+    const [col, dir] = e.target.value.split(/_(?=asc$|desc$)/);
+    sortCol = col; sortAsc = dir === 'asc';
+    renderTable();
+  });
+
+  // Search
+  let searchTimer;
+  document.getElementById('searchInput').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(renderTable, 200);
+  });
+
+  // Date filter
+  document.getElementById('dateSelect').addEventListener('change', renderTable);
+
+  // Header click sort
+  document.querySelectorAll('thead th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (sortCol === col) {
+        sortAsc = !sortAsc;
+      } else {
+        sortCol = col;
+        sortAsc = (col === 'code'); // code defaults asc, others desc
+      }
+      renderTable();
+    });
+  });
+
+  // Company click → modal
+  document.getElementById('tbody').addEventListener('click', e => {
+    const link = e.target.closest('.company-link');
+    if (!link) return;
+    const detail = link.dataset.detail;
+    const entry = filterAndSort().find(r => r.detail === detail);
+    if (entry) openDetail(entry);
+  });
+
+  // Modal close
+  document.getElementById('modalClose').addEventListener('click', closeModal);
+  document.getElementById('modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+
+  // Tab click
+  document.getElementById('modalTabs').addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    const idx = parseInt(btn.dataset.tab);
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    // Find current detail
+    const detailFile = document.getElementById('modalTitle').dataset.detail;
+    const detail = detailCache[detailFile];
+    if (detail) {
+      const names = Object.keys(detail.sheets);
+      renderSheet(detail.sheets, names, idx);
+    }
+  });
+
+  // Keyboard
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+/* ============================================================
+   Load data
+   ============================================================ */
+async function loadData() {
+  document.getElementById('info').textContent = '読み込み中...';
+  try {
+    const res = await fetch('data/index.json');
+    DATA = await res.json();
+  } catch (e) {
+    document.getElementById('info').textContent = 'データ読み込みエラー: data/index.json が見つかりません';
+    return;
+  }
+
+  // Populate date filter
+  const dates = [...new Set(DATA.map(d => d.date_raw))].sort().reverse();
+  const dateSel = document.getElementById('dateSelect');
+  dates.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d;
+    o.textContent = `${d.slice(0,4)}/${d.slice(4,6)}/${d.slice(6)}`;
+    dateSel.appendChild(o);
+  });
+
+  renderTable();
+}
+
+/* Fix: store detail file on modal title for tab switching */
+const origOpenDetail = openDetail;
+openDetail = async function(entry) {
+  document.getElementById('modalTitle').dataset.detail = entry.detail;
+  await origOpenDetail(entry);
+};
+
+/* ============================================================
+   Start
+   ============================================================ */
+document.addEventListener('DOMContentLoaded', () => { init(); loadData(); });
+</script>
+</body>
+</html>
