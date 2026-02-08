@@ -341,13 +341,20 @@ def main():
 
     # --- 株価指標の取得 ---
     if not args.skip_stock and index_entries:
-        # ユニークなコードを収集（数字4桁のみ対象）
+        # ユニークなコードを収集（4桁の数字またはアルファベット混在コード）
         unique_codes = sorted({e['code'] for e in index_entries
-                               if re.fullmatch(r'\d{4}', e['code'])})
+                               if re.fullmatch(r'[0-9A-Za-z]{4}', e['code'])})
 
-        # キャッシュ確認
+        # キャッシュ確認（空データはリトライ対象）
         stock_cache = load_stock_cache()
-        codes_to_fetch = [c for c in unique_codes if c not in stock_cache]
+        codes_to_fetch = []
+        for c in unique_codes:
+            cached = stock_cache.get(c)
+            if cached is None:
+                codes_to_fetch.append(c)
+            elif isinstance(cached, dict) and not cached.get('pbr') and not cached.get('price'):
+                # 前回取得失敗（空データ）→ リトライ
+                codes_to_fetch.append(c)
 
         if codes_to_fetch:
             new_data = fetch_stock_data(codes_to_fetch)
