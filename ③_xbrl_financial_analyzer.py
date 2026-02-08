@@ -60,8 +60,8 @@ DEFAULT_SAVE_ROOT = r"G:\マイドライブ\TDnet_XBRL"
 PAGE_SLEEP_SEC = 3
 XBRL_SLEEP_SEC = 1
 
-# 変化率の閾値（デフォルト20%以上の変化を「大きな変動」とする）
-DEFAULT_CHANGE_THRESHOLD = 0.20
+# 変化率の閾値（デフォルト15%以上の変化を「大きな変動」とする）
+DEFAULT_CHANGE_THRESHOLD = 0.15
 
 # 除外キーワード（タイトルに含まれたら完全除外）
 EXCLUDE_KEYWORDS = ["ＥＴＦ", "ETF", "ETN", "ＥＴＮ", "_MAXIS"]
@@ -836,13 +836,13 @@ def build_financial_summary(df: pd.DataFrame) -> pd.DataFrame:
 # Section 4: 財務分析
 # ============================================================
 
-def analyze_significant_changes(summary_df: pd.DataFrame, threshold: float = 0.20) -> pd.DataFrame:
+def analyze_significant_changes(summary_df: pd.DataFrame, threshold: float = 0.15) -> pd.DataFrame:
     """
     大きく増減変化した勘定科目を検出する。
 
     Args:
         summary_df: 財務サマリーDataFrame
-        threshold:  変動率の閾値（デフォルト20%）
+        threshold:  変動率の閾値（デフォルト15%）
 
     Returns:
         DataFrame: 閾値以上の変動があった勘定科目（変動率の絶対値降順）
