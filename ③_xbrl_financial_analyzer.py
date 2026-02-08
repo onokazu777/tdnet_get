@@ -231,6 +231,11 @@ TSE_ELEMENT_MAP = {
     # --- IFRS売上高 ---
     "NetSalesIFRS": "NetSales",
     "ChangeInNetSalesIFRS": "ChangeInNetSales",
+    # --- 米国基準 ---
+    "NetSalesUS": "NetSales",
+    "TotalRevenuesUS": "NetSales",
+    "ChangeInNetSalesUS": "ChangeInNetSales",
+    "ChangeInTotalRevenuesUS": "ChangeInNetSales",
     # --- 銀行業・保険業 ---
     "OrdinaryRevenuesBK": "OrdinaryRevenuesBK",
     "ChangeInOrdinaryRevenuesBK": "ChangeInOrdinaryRevenuesBK",

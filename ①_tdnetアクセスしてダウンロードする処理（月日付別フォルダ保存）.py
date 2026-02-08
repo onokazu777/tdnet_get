@@ -74,7 +74,7 @@ PDF_SLEEP_SEC = 1    # PDF1本DL成功ごとに待機
 
 # タイトルに含まれたら完全除外（リストにも入れない・PDFも取らない）
 # 例：ETF/ETNなど不要な日次開示を排除
-EXCLUDE_KEYWORDS = ["ＥＴＦ", "ETF", "ETN", "ＥＴＮ","_MAXIS"]
+EXCLUDE_KEYWORDS = ["ＥＴＦ", "ETF", "ETN", "ＥＴＮ","_MAXIS","R-"]
 
 # 分類（タイトルベース）
 # 左ほど優先度が高い（CSVソートに使用）
