@@ -24,13 +24,43 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pandas beautifulsoup4 lxml openpyxl yfinance
+        run: pip install requests pandas beautifulsoup4 lxml openpyxl yfinance pymupdf
 
       # ── 3. 今日の日付（JST） ──
       - name: Set today's date
         run: echo "TODAY=$(date +%Y%m%d)" >> $GITHUB_ENV
 
-      # ── 4. ③ XBRL取得 & 分析 → Excel生成 ──
+      # ── 4a. ① TDnet PDFダウンロード ──
+      - name: Run PDF downloader
+        run: |
+          python "①_tdnetアクセスしてダウンロードする処理（月日付別フォルダ保存）.py" \
+            --target "$TODAY" \
+            --save-root ./pdf_tmp \
+            --page-sleep 2 \
+            --pdf-sleep 0.5
+
+      # ── 4b. ②A PDF全文キーワード検索 ──
+      - name: Run keyword search
+        run: |
+          python "②a②bは２つフリーワード検索.py" analyze \
+            --target "$TODAY" \
+            --save-root ./pdf_tmp \
+            --keywords "価格交渉" "増産" "価格改定" "価格転嫁" "値上" \
+              "想定以上" "上方修正" "下方修正" "想定以下" "未達" "大幅" \
+              "計画を上" "計画を下" "計画以" \
+              "需要回復" "需要の回復" "需要が増" "需要が低" "悪化" \
+              "グローバルニッチトップ" "トップシェア" "シェア拡大" "レアアース"
+
+      # ── 4c. ②B 配布用CSV作成 ──
+      - name: Create distribution CSV
+        run: |
+          python "②a②bは２つフリーワード検索.py" distribute \
+            --target "$TODAY" \
+            --save-root ./pdf_tmp \
+            --no-stop-on-empty-meta
+        continue-on-error: true
+
+      # ── 4d. ③ XBRL取得 & 分析 → Excel生成 ──
       - name: Run XBRL analyzer
         run: |
           python "③_xbrl_financial_analyzer.py" \
@@ -96,6 +126,16 @@ jobs:
                   dst = os.path.join(dst_dir, fn)
                   if not os.path.exists(dst):
                       shutil.copy2(src, dst)
+
+          # ②の結果CSVをコピー
+          import glob
+          csv_dir = 'viewer/data/search'
+          os.makedirs(csv_dir, exist_ok=True)
+          for pattern in ['Analysis_Hits_free_word_*.csv', 'PDF_Search_Result_Distribution_free_word_*.csv']:
+              for src in glob.glob(os.path.join('pdf_tmp', pattern)):
+                  dst = os.path.join(csv_dir, os.path.basename(src))
+                  shutil.copy2(src, dst)
+                  print(f'Copied search CSV: {os.path.basename(src)}')
           "
 
       # ── 8. viewer リポジトリにpush ──
