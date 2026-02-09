@@ -485,16 +485,12 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
         local_pdf_path = os.path.join(root_dir, d, pdf_raw)
         title_link_local = f'=HYPERLINK("{local_pdf_path}", "{display_text}")'
 
-        # 既存互換用: --local-link の有無で「表題（リンク）」列にどちらを入れるかを切り替え
-        out_title_link_main = title_link_local if use_local_link else title_link_tdnet
-
         results.append(
             {
                 "日付": d,
                 "時刻": meta["時刻"],
                 "コード": meta["コード"],
                 "会社名": meta["会社名"],
-                "表題（リンク）": out_title_link_main,
                 "表題（リンク_TDnet）": title_link_tdnet,
                 "表題（リンク_ローカル）": title_link_local,
                 "キーワード": r["キーワード"],
@@ -518,7 +514,6 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
         "時刻",
         "コード",
         "会社名",
-        "表題（リンク）",
         "表題（リンク_TDnet）",
         "表題（リンク_ローカル）",
         "キーワード",
@@ -554,7 +549,7 @@ def parse_args():
     p_di.add_argument(
         "--local-link",
         action="store_true",
-        help="表題（リンク）をTDnetではなくローカルPDFへのリンクにする（自分用）",
+        help="（互換性のため残存・現在は無効）",
     )
 
     p_title = sub.add_parser("title", help="表題（タイトル）に対するキーワード検索（PDF本文は読まない高速版）")
