@@ -78,170 +78,9 @@ COOKIES = {"cb_agree": "0"}
 
 
 # ============================================================
-# XBRLラベルマッピング（要素名 → 日本語名称）
+# XBRLタクソノミ（共有モジュールから読み込み）
 # ============================================================
-
-XBRL_LABEL_MAP = {
-    # --- 損益計算書 (P/L) ---
-    "NetSales": "売上高",
-    "Revenue": "売上収益（IFRS）",
-    "OperatingRevenue1": "営業収益",
-    "CostOfSales": "売上原価",
-    "GrossProfit": "売上総利益",
-    "SellingGeneralAndAdministrativeExpenses": "販売費及び一般管理費",
-    "OperatingIncome": "営業利益",
-    "NonOperatingIncome": "営業外収益",
-    "NonOperatingExpenses": "営業外費用",
-    "OrdinaryIncome": "経常利益",
-    "ExtraordinaryIncome": "特別利益",
-    "ExtraordinaryLoss": "特別損失",
-    "IncomeBeforeIncomeTaxes": "税引前当期純利益",
-    "IncomeTaxes": "法人税等合計",
-    "ProfitLoss": "当期純利益",
-    "ProfitLossAttributableToOwnersOfParent": "親会社株主に帰属する当期純利益",
-    "ComprehensiveIncome": "包括利益",
-
-    # --- 貸借対照表 (B/S) ---
-    "CurrentAssets": "流動資産合計",
-    "NoncurrentAssets": "固定資産合計",
-    "DeferredAssets": "繰延資産",
-    "TotalAssets": "総資産",
-    "CurrentLiabilities": "流動負債合計",
-    "NoncurrentLiabilities": "固定負債合計",
-    "TotalLiabilities": "負債合計",
-    "NetAssets": "純資産合計",
-    "ShareholdersEquity": "株主資本合計",
-    "CapitalStock": "資本金",
-    "CapitalSurplus": "資本剰余金",
-    "RetainedEarnings": "利益剰余金",
-    "TreasuryStock": "自己株式",
-
-    # --- キャッシュフロー計算書 (CF) ---
-    "NetCashProvidedByUsedInOperatingActivities": "営業活動によるCF",
-    "NetCashProvidedByUsedInInvestingActivities": "投資活動によるCF",
-    "NetCashProvidedByUsedInFinancingActivities": "財務活動によるCF",
-    "CashAndCashEquivalents": "現金及び現金同等物期末残高",
-    "IncreaseDecreaseInCashAndCashEquivalents": "現金及び現金同等物の増減額",
-
-    # --- 1株当たり情報 ---
-    "EarningsPerShare": "1株当たり当期純利益",
-    "DilutedEarningsPerShare": "潜在株式調整後EPS",
-    "DividendPerShare": "1株当たり配当額",
-    "NetAssetsPerShare": "1株当たり純資産",
-
-    # --- 経営指標 ---
-    "EquityToAssetRatio": "自己資本比率（%）",
-    "RateOfReturnOnEquity": "自己資本利益率ROE（%）",
-    "PriceEarningsRatio": "株価収益率PER（倍）",
-
-    # --- 営業収益・経常収益（業種別） ---
-    "OperatingRevenue1": "営業収益",
-    "OrdinaryRevenuesBK": "経常収益",
-    "OrdinaryRevenuesIN": "経常収益（保険）",
-    "ChangeInOrdinaryRevenuesBK": "経常収益増減率",
-    "ChangeInOrdinaryRevenuesIN": "経常収益増減率（保険）",
-
-    # --- 会社情報 (DEI) ---
-    "FilerNameInJapaneseDEI": "提出者名",
-    "SecurityCodeDEI": "証券コード",
-    "AccountingStandardsDEI": "会計基準",
-    "CurrentFiscalYearStartDateDEI": "当期開始日",
-    "CurrentFiscalYearEndDateDEI": "当期終了日",
-    "CurrentPeriodEndDateDEI": "当四半期末日",
-    "TypeOfCurrentPeriodDEI": "当四半期会計期間の種類",
-}
-
-
-# ============================================================
-# TDnetサマリー要素名 → 標準要素名マッピング
-# TDnetの決算短信サマリーは tse-ed-t 名前空間独自の要素名を使う
-# ============================================================
-
-TSE_ELEMENT_MAP = {
-    # --- P/L 日本基準 ---
-    "NetSales": "NetSales",
-    "OperatingIncome": "OperatingIncome",
-    "OrdinaryIncome": "OrdinaryIncome",
-    "ProfitLoss": "ProfitLoss",
-    "ProfitLossAttributableToOwnersOfParent": "ProfitLossAttributableToOwnersOfParent",
-    "ComprehensiveIncome": "ComprehensiveIncome",
-    # --- P/L IFRS ---
-    "SalesIFRS": "NetSales",
-    "RevenueIFRS": "NetSales",
-    "OperatingIncomeIFRS": "OperatingIncome",
-    "ProfitBeforeTaxIFRS": "IncomeBeforeIncomeTaxes",
-    "ProfitLossIFRS": "ProfitLoss",
-    "ProfitLossAttributableToOwnersOfParentIFRS": "ProfitLossAttributableToOwnersOfParent",
-    "ComprehensiveIncomeIFRS": "ComprehensiveIncome",
-    # --- 変動率 ---
-    "ChangeInNetSales": "ChangeInNetSales",
-    "ChangeInOperatingIncome": "ChangeInOperatingIncome",
-    "ChangeInOrdinaryIncome": "ChangeInOrdinaryIncome",
-    "ChangeInProfitLoss": "ChangeInProfitLoss",
-    "ChangeInSalesIFRS": "ChangeInNetSales",
-    "ChangeInOperatingIncomeIFRS": "ChangeInOperatingIncome",
-    "ChangeInProfitBeforeTaxIFRS": "ChangeInIncomeBeforeTaxes",
-    "ChangeInProfitLossIFRS": "ChangeInProfitLoss",
-    # --- EPS ---
-    "EarningsPerShare": "EarningsPerShare",
-    "DilutedEarningsPerShare": "DilutedEarningsPerShare",
-    "EarningsPerShareIFRS": "EarningsPerShare",
-    "DilutedEarningsPerShareIFRS": "DilutedEarningsPerShare",
-    # --- B/S ---
-    "TotalAssets": "TotalAssets",
-    "NetAssets": "NetAssets",
-    "Equity": "ShareholdersEquity",
-    "TotalAssetsIFRS": "TotalAssets",
-    "NetAssetsIFRS": "NetAssets",
-    "EquityIFRS": "ShareholdersEquity",
-    "EquityToAssetRatio": "EquityToAssetRatio",
-    "EquityToAssetRatioIFRS": "EquityToAssetRatio",
-    "BookValuePerShare": "NetAssetsPerShare",
-    "BookValuePerShareIFRS": "NetAssetsPerShare",
-    # --- 配当 ---
-    "DividendPerShare": "DividendPerShare",
-    "AnnualDividendPerShare": "DividendPerShare",
-    "DividendPerShareIFRS": "DividendPerShare",
-    # --- CF ---
-    "CashFlowsFromOperatingActivities": "NetCashProvidedByUsedInOperatingActivities",
-    "CashFlowsFromInvestingActivities": "NetCashProvidedByUsedInInvestingActivities",
-    "CashFlowsFromFinancingActivities": "NetCashProvidedByUsedInFinancingActivities",
-    "CashAndEquivalents": "CashAndCashEquivalents",
-    "CashFlowsFromOperatingActivitiesIFRS": "NetCashProvidedByUsedInOperatingActivities",
-    "CashFlowsFromInvestingActivitiesIFRS": "NetCashProvidedByUsedInInvestingActivities",
-    "CashFlowsFromFinancingActivitiesIFRS": "NetCashProvidedByUsedInFinancingActivities",
-    "CashAndEquivalentsIFRS": "CashAndCashEquivalents",
-    # --- IFRS追加要素 ---
-    "ProfitIFRS": "ProfitLoss",
-    "ProfitAttributableToOwnersOfParentIFRS": "ProfitLossAttributableToOwnersOfParent",
-    "TotalComprehensiveIncomeIFRS": "ComprehensiveIncome",
-    "BasicEarningsPerShareIFRS": "EarningsPerShare",
-    "TotalEquityIFRS": "NetAssets",
-    "EquityAttributableToOwnersOfParentIFRS": "ShareholdersEquity",
-    "EquityAttributableToOwnersOfParentToTotalAssetsRatioIFRS": "EquityToAssetRatio",
-    # --- 営業収益（運輸・物流・卸売等）---
-    "OperatingRevenues": "OperatingRevenue1",
-    "OperatingRevenuesIFRS": "OperatingRevenue1",
-    "OperatingRevenuesSpecific": "OperatingRevenue1",
-    "OperatingRevenuesSE": "OperatingRevenue1",
-    "ChangeInOperatingRevenues": "ChangeInNetSales",
-    "ChangeInOperatingRevenuesIFRS": "ChangeInNetSales",
-    "ChangeInOperatingRevenuesSpecific": "ChangeInNetSales",
-    "ChangeInOperatingRevenuesSE": "ChangeInNetSales",
-    # --- IFRS売上高 ---
-    "NetSalesIFRS": "NetSales",
-    "ChangeInNetSalesIFRS": "ChangeInNetSales",
-    # --- 米国基準 ---
-    "NetSalesUS": "NetSales",
-    "TotalRevenuesUS": "NetSales",
-    "ChangeInNetSalesUS": "ChangeInNetSales",
-    "ChangeInTotalRevenuesUS": "ChangeInNetSales",
-    # --- 銀行業・保険業 ---
-    "OrdinaryRevenuesBK": "OrdinaryRevenuesBK",
-    "ChangeInOrdinaryRevenuesBK": "ChangeInOrdinaryRevenuesBK",
-    "OrdinaryRevenuesIN": "OrdinaryRevenuesIN",
-    "ChangeInOrdinaryRevenuesIN": "ChangeInOrdinaryRevenuesIN",
-}
+from xbrl_taxonomy import XBRL_LABEL_MAP, TSE_ELEMENT_MAP
 
 
 # ============================================================
@@ -421,21 +260,34 @@ def download_xbrl_zip(session, url, save_path):
 
 def find_xbrl_instance_in_zip(zip_path):
     """
-    ZIPファイルからXBRLインスタンスドキュメントを探す。
+    ZIPファイルからXBRLインスタンスドキュメントを探す（後方互換用）。
+    find_all_xbrl_in_zip() の結果から1つ目を返す。
+    """
+    instances = find_all_xbrl_in_zip(zip_path)
+    if instances:
+        return instances[0][0], instances[0][1]
+    print("   ⚠️ XBRLインスタンスが見つかりません")
+    return None, None
+
+
+def find_all_xbrl_in_zip(zip_path):
+    """
+    ZIPファイルから Summary + Attachment の両方のXBRLインスタンスを取得する。
 
     TDnet XBRL の ZIP構造:
       XBRLData/Summary/   *-ixbrl.htm    ← サマリー（決算短信1ページ目）
       XBRLData/Attachment/ *-ixbrl.htm    ← 詳細（財務諸表: B/S, P/L, CF等）
-                           *-def.xml      ← 定義（←これはスキップ）
-                           *-pre.xml      ← 表示（←これもスキップ）
-                           *-cal.xml      ← 計算（←これもスキップ）
-                           *-lab.xml      ← ラベル（←これもスキップ）
+                           *-def.xml      ← 定義（←スキップ）
+                           *-pre.xml      ← 表示（←スキップ）
+                           *-cal.xml      ← 計算（←スキップ）
+                           *-lab.xml      ← ラベル（←スキップ）
 
-    優先順位:
-      1. Attachment 配下の -ixbrl.htm（最もサイズが大きいもの = B/S全体 等）
-      2. Summary 配下の -ixbrl.htm（サマリー情報）
-      3. .xbrl ファイル
+    Returns:
+        list of (filename, content, source_type) tuples
+        source_type: "summary" / "attachment" / "xbrl"
     """
+    results = []
+
     with zipfile.ZipFile(zip_path, 'r') as zf:
         ixbrl_attachment = []
         ixbrl_summary = []
@@ -450,10 +302,10 @@ def find_xbrl_instance_in_zip(zip_path):
 
             # Inline XBRL（メインデータ）
             if lower.endswith('-ixbrl.htm') or lower.endswith('-ixbrl.html'):
-                if 'attachment' in lower:
-                    ixbrl_attachment.append((name, info.file_size))
-                elif 'summary' in lower:
+                if 'summary' in lower:
                     ixbrl_summary.append((name, info.file_size))
+                elif 'attachment' in lower:
+                    ixbrl_attachment.append((name, info.file_size))
                 else:
                     ixbrl_attachment.append((name, info.file_size))
 
@@ -461,30 +313,25 @@ def find_xbrl_instance_in_zip(zip_path):
             elif lower.endswith('.xbrl'):
                 xbrl_files.append((name, info.file_size))
 
-        # サマリーの iXBRL を返す（決算概要データ）
-        # → 最もサイズが大きいファイルを選択
+        # Summary（最大のもの）— 決算概要データ
         if ixbrl_summary:
             ixbrl_summary.sort(key=lambda x: -x[1])
             best = ixbrl_summary[0][0]
-            content = zf.read(best)
-            return best, content
+            results.append((best, zf.read(best), "summary"))
 
-        # Attachment の iXBRL（詳細財務諸表）
+        # Attachment（最大のもの）— 詳細財務諸表（B/S, P/L, CF）
         if ixbrl_attachment:
             ixbrl_attachment.sort(key=lambda x: -x[1])
             best = ixbrl_attachment[0][0]
-            content = zf.read(best)
-            return best, content
+            results.append((best, zf.read(best), "attachment"))
 
-        # 通常の XBRL
-        if xbrl_files:
+        # Summary も Attachment もない場合 → 通常の XBRL
+        if not results and xbrl_files:
             xbrl_files.sort(key=lambda x: -x[1])
             best = xbrl_files[0][0]
-            content = zf.read(best)
-            return best, content
+            results.append((best, zf.read(best), "xbrl"))
 
-        print("   ⚠️ XBRLインスタンスが見つかりません")
-        return None, None
+    return results
 
 
 def parse_contexts(tree):
@@ -1173,21 +1020,33 @@ def parse_args():
 def process_single_xbrl(zip_path, company_info, threshold, output_dir):
     """1つのXBRL ZIPファイルを解析・分析・Excel出力する"""
 
-    # XBRL ZIPからインスタンスを探す
-    filename, content = find_xbrl_instance_in_zip(zip_path)
-    if content is None:
+    # XBRL ZIPから Summary + Attachment の両方を取得
+    instances = find_all_xbrl_in_zip(zip_path)
+    if not instances:
         print(f"   ⚠️ XBRLインスタンスが見つかりません: {zip_path}")
         return
 
-    print(f"   📄 XBRLインスタンス: {filename}")
+    # 全インスタンスを解析してマージ
+    all_parsed = []
+    for filename, content, source_type in instances:
+        print(f"   📄 XBRL ({source_type}): {filename}")
+        parsed = parse_xbrl_content(content, filename)
+        if parsed:
+            for item in parsed:
+                item["source"] = source_type
+            all_parsed.extend(parsed)
 
-    # パース
-    parsed_data = parse_xbrl_content(content, filename)
+    parsed_data = all_parsed
     if not parsed_data:
         print("   ⚠️ 財務データが抽出できませんでした")
         return
 
-    print(f"   📊 抽出要素数: {len(parsed_data)}")
+    src_counts = {}
+    for item in parsed_data:
+        s = item.get("source", "?")
+        src_counts[s] = src_counts.get(s, 0) + 1
+    src_info = " + ".join(f"{k}:{v}" for k, v in src_counts.items())
+    print(f"   📊 抽出要素数: {len(parsed_data)} ({src_info})")
 
     # DataFrame構築
     raw_df = build_dataframe(parsed_data)
