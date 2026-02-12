@@ -362,6 +362,15 @@ def main():
                     f"{safe_filename(r_name)}_"
                     f"{safe_filename(r_title)}.pdf"
                 )
+
+                # ファイル名がLinux(ext4)の255バイト制限を超えないよう切り詰め
+                max_fn_bytes = 250  # 少しマージンを持たせる
+                ext = ".pdf"
+                fn_base = fn[: -len(ext)]
+                while len(fn_base.encode("utf-8")) > max_fn_bytes - len(ext.encode("utf-8")):
+                    fn_base = fn_base[:-1]
+                fn = fn_base.rstrip() + ext
+
                 pdf_path = day_dir / fn
 
                 # PDF保存（既存があればスキップ）
