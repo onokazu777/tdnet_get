@@ -192,11 +192,14 @@ def search_pdfs_local(
                 pdf_key = norm_key(pdf_name)
                 meta = meta_index.get(pdf_key, {})
                 pdf_url = local_pdf_url(pdf_server_port, d, pdf_name) if pdf_server_port else ""
+                tdnet_url = meta.get("URL", "")  # TDnetリンク（CSV出力用）
                 row = {
                     "日付": d, "コード": code,
                     "企業名": meta.get("会社名", ""),
                     "分類": meta.get("分類", "その他"),
                     "PDF": pdf_url,
+                    "ローカルパス": pdf_path,
+                    "TDnet_URL": tdnet_url,
                 }
                 for kw in keywords:
                     row[kw] = kw_result.get(kw, "")
@@ -252,6 +255,7 @@ def search_text_json(
     date_from: str, date_to: str, keywords: list[str],
     available_dates: list[str], load_func,
     pdf_server_port: int = 0,
+    pdf_root: str = "",
     progress_callback=None,
 ) -> pd.DataFrame:
     """JSON経由キーワード検索。pdf_server_port > 0 ならローカルURL、0ならTDnet URL。"""
@@ -278,16 +282,21 @@ def search_text_json(
 
             if any(v for v in kw_result.values()):
                 pdf_name = file_info.get("pdf", "")
+                tdnet_url = file_info.get("url", "")  # TDnetリンク（常に保持）
                 if pdf_server_port and pdf_name:
                     pdf_url = local_pdf_url(pdf_server_port, d, pdf_name)
+                    local_path = os.path.join(pdf_root, d, pdf_name) if pdf_root else ""
                 else:
-                    pdf_url = file_info.get("url", "")
+                    pdf_url = tdnet_url  # クラウドモード: TDnet URLを表示用に使う
+                    local_path = ""
                 row = {
                     "日付": d,
                     "コード": file_info.get("code", ""),
                     "企業名": file_info.get("company", ""),
                     "分類": file_info.get("category", "その他"),
                     "PDF": pdf_url,
+                    "ローカルパス": local_path,
+                    "TDnet_URL": tdnet_url,
                 }
                 for kw in keywords:
                     row[kw] = kw_result.get(kw, "")
@@ -410,7 +419,7 @@ def main():
             df = search_text_json(
                 d_from, d_to, keywords_input, available_dates,
                 load_func=lambda d: load_text_json_local(text_json_dir, d),
-                pdf_server_port=pdf_server_port, progress_callback=cb,
+                pdf_server_port=pdf_server_port, pdf_root=pdf_root, progress_callback=cb,
             )
         else:
             def cb(c, t): progress_bar.progress(c / t if t else 0, text=f"クラウド読み込み中... ({c}/{t}日)")
@@ -443,10 +452,29 @@ def main():
             filtered_df = df[df["分類"].isin(selected_categories)] if selected_categories else df
             st.metric("ヒット数", f"{len(filtered_df)} 件 / 全 {len(df)} 件")
 
-            # CSVダウンロード（一番上）
-            csv_data = filtered_df.to_csv(index=False, encoding="utf-8-sig")
+            # CSVダウンロード（一番上）- BOM付きUTF-8でExcel対応
+            csv_export = filtered_df.copy()
+            # CSV用の日付フォーマット
+            csv_export["日付"] = csv_export["日付"].apply(
+                lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
+            )
+            # CSV用: ExcelのHYPERLINK関数でクリック可能なリンクにする
+            # TDnet URL優先（一般公開向け）、無ければローカルパス
+            def _make_hyperlink(row):
+                tdnet_url = row.get("TDnet_URL", "")
+                local_path = row.get("ローカルパス", "")
+                if tdnet_url and tdnet_url.startswith("http"):
+                    return f'=HYPERLINK("{tdnet_url}","開く")'
+                elif local_path:
+                    return f'=HYPERLINK("{local_path}","開く")'
+                return ""
+            csv_export["PDF"] = csv_export.apply(_make_hyperlink, axis=1)
+            csv_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
+            csv_export = csv_export[[c for c in csv_cols if c in csv_export.columns]]
+            # BOM付きUTF-8でバイト列として生成
+            csv_bytes = csv_export.to_csv(index=False).encode("utf-8-sig")
             st.download_button(
-                label="結果をCSVダウンロード", data=csv_data,
+                label="結果をCSVダウンロード", data=csv_bytes,
                 file_name=f"keyword_search_{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}.csv",
                 mime="text/csv",
             )
@@ -466,7 +494,10 @@ def main():
                 hide_index=True,
                 height=min(len(table_df) * 40 + 40, 600),
                 column_config={
-                    "PDF": st.column_config.LinkColumn("PDF", display_text="開く"),
+                    "PDF": st.column_config.LinkColumn(
+                        "PDF",
+                        display_text="開く",
+                    ),
                 },
             )
 
