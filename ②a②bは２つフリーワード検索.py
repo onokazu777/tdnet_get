@@ -101,37 +101,31 @@ def select_target_folders(root_path: str, target_spec: str):
 def extract_hits_pages_from_pdf(pdf_path: str, keywords, pages_sep=" "):
     """
     戻り値:
-      (キーワード文字列, ヒットページ数, 記述ページ)
+      dict[str, str]  -- キーワード -> ヒットページ番号文字列
+      例: {"増産": "3 5", "上方修正": "11 15", "シェア拡大": ""}
+      ヒットなしのキーワードは空文字列。
     """
     try:
         doc = fitz.open(pdf_path)
 
-        hits = []
-        hit_pages = set()
+        kw_pages = {kw: set() for kw in keywords}
 
         for page_index, page in enumerate(doc, start=1):
             text = page.get_text("text")
-            page_hit = False
-
             for kw in keywords:
                 if kw in text:
-                    page_hit = True
-                    if kw not in hits:
-                        hits.append(kw)
-
-            if page_hit:
-                hit_pages.add(page_index)
+                    kw_pages[kw].add(page_index)
 
         doc.close()
 
-        pages_sorted = sorted(hit_pages)
-        pages_str = pages_sep.join(str(p) for p in pages_sorted)
-
-        return " ".join(hits), len(pages_sorted), pages_str
+        return {
+            kw: pages_sep.join(str(p) for p in sorted(pages))
+            for kw, pages in kw_pages.items()
+        }
 
     except Exception as e:
         print(f"解析失敗: {pdf_path} / {e}")
-        return "", 0, ""
+        return {kw: "" for kw in keywords}
 
 # -----------------------------
 # アーカイブ処理用
@@ -374,25 +368,28 @@ def run_analyze(root_dir: str, target_spec: str, keywords):
             pdf_path = os.path.join(day_dir, pdf_name)
             processed_pdfs += 1
 
-            hits_str, hit_pages_count, pages_str = extract_hits_pages_from_pdf(
+            kw_pages_dict = extract_hits_pages_from_pdf(
                 pdf_path, keywords, pages_sep=PAGES_SEPARATOR
             )
 
-            if hits_str:
+            # いずれかのキーワードがヒットしたか判定
+            has_any_hit = any(v for v in kw_pages_dict.values())
+
+            if has_any_hit:
                 hit_files += 1
                 folder_hits += 1
                 code = extract_code_from_pdf_filename(pdf_name)
 
-                results.append(
-                    {
-                        "日付": d,
-                        "コード": code,
-                        "PDFファイル名": pdf_name,
-                        "キーワード": hits_str,
-                        "ヒットページ数": hit_pages_count,
-                        "記述されているページ": pages_str,
-                    }
-                )
+                row = {
+                    "日付": d,
+                    "コード": code,
+                    "PDFファイル名": pdf_name,
+                }
+                # キーワードごとの列を追加（ページ番号 or 空文字）
+                for kw in keywords:
+                    row[kw] = kw_pages_dict.get(kw, "")
+
+                results.append(row)
 
             # 50件ごとにざっくり進捗を表示（ヒットの有無に関係なく）
             if processed_pdfs % 50 == 0 or processed_pdfs == total_pdfs:
@@ -409,7 +406,11 @@ def run_analyze(root_dir: str, target_spec: str, keywords):
         return
 
     df = pd.DataFrame(results)
-    df_sorted = df.sort_values(by=["日付", "ヒットページ数", "PDFファイル名"], ascending=[False, False, True])
+
+    # ヒット列数（キーワード列のうち値があるものの数）でソート用の列を一時追加
+    df["_hit_kw_count"] = df[keywords].apply(lambda r: sum(1 for v in r if v), axis=1)
+    df_sorted = df.sort_values(by=["日付", "_hit_kw_count", "PDFファイル名"], ascending=[False, False, True])
+    df_sorted = df_sorted.drop(columns=["_hit_kw_count"])
 
     # 検索に使用したキーワード一覧（全行同じ値）を列として追加
     if keywords:
@@ -417,13 +418,14 @@ def run_analyze(root_dir: str, target_spec: str, keywords):
     else:
         keywords_summary = ""
 
-    df_sorted = df_sorted[["日付", "コード", "PDFファイル名", "キーワード", "ヒットページ数", "記述されているページ"]]
+    cols = ["日付", "コード", "PDFファイル名"] + list(keywords)
+    df_sorted = df_sorted[cols]
     df_sorted["検索キーワード一覧"] = keywords_summary
 
     archive_if_exists(out_path)
     df_sorted.to_csv(out_path, index=False, encoding="utf-8-sig")
 
-    print("\n✅ ②A 完了（解析専用・ページ列あり）")
+    print("\n✅ ②A 完了（解析専用・キーワード別ページ列）")
     print("解析PDF数:", total_pdfs)
     print("ヒットPDF数:", hit_files)
     print("出力CSV:", out_csv)
@@ -442,10 +444,15 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
     hits_df = pd.read_csv(analysis_path, dtype=str).fillna("")
     hits_df.columns = [str(c).strip().replace("\ufeff", "") for c in hits_df.columns]
 
-    required_in_hits = ["日付", "PDFファイル名", "キーワード", "ヒットページ数", "記述されているページ"]
+    # 必須列チェック
+    required_in_hits = ["日付", "PDFファイル名"]
     for c in required_in_hits:
         if c not in hits_df.columns:
             raise ValueError(f"②A結果に必要な列がありません: {c}")
+
+    # キーワード列を特定（固定列以外がキーワード列）
+    fixed_cols = {"日付", "コード", "PDFファイル名", "検索キーワード一覧"}
+    keyword_cols = [c for c in hits_df.columns if c not in fixed_cols]
 
     dates = hits_df["日付"].astype(str).str.strip().tolist()
     tdnet_index, missing_csv_dates = build_tdnet_index_for_dates(root_dir, dates)
@@ -485,21 +492,20 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
         local_pdf_path = os.path.join(root_dir, d, pdf_raw)
         title_link_local = f'=HYPERLINK("{local_pdf_path}", "{display_text}")'
 
-        results.append(
-            {
-                "日付": d,
-                "時刻": meta["時刻"],
-                "コード": meta["コード"],
-                "会社名": meta["会社名"],
-                "表題（リンク_TDnet）": title_link_tdnet,
-                "表題（リンク_ローカル）": title_link_local,
-                "キーワード": r["キーワード"],
-                "ヒットページ数": r["ヒットページ数"],
-                "記述されているページ": r["記述されているページ"],
-                "分類": meta["分類"],
-                "URL（生）": meta["URL（生）"],
-            }
-        )
+        row = {
+            "日付": d,
+            "コード": meta["コード"],
+            "会社名": meta["会社名"],
+            "分類": meta["分類"],
+            "表題（リンク_TDnet）": title_link_tdnet,
+            "表題（リンク_ローカル）": title_link_local,
+        }
+        # キーワード別ページ列をそのまま引き継ぐ
+        for kw_col in keyword_cols:
+            row[kw_col] = r.get(kw_col, "")
+
+        row["URL（生）"] = meta["URL（生）"]
+        results.append(row)
 
     # 出力ファイル名: 通常版(_sh) と 自分用ローカルリンク版(_local_sh) を分ける
     suffix = "_local_sh.csv" if use_local_link else "_sh.csv"
@@ -509,25 +515,24 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
     archive_if_exists(out_path)
     out_df = pd.DataFrame(results)
 
+    # カラム順: 識別列 → 分類 → 表題リンク → キーワード列 → URL
     cols_order = [
         "日付",
-        "時刻",
         "コード",
         "会社名",
+        "分類",
         "表題（リンク_TDnet）",
         "表題（リンク_ローカル）",
-        "キーワード",
-        "ヒットページ数",
-        "記述されているページ",
-        "分類",
+    ] + keyword_cols + [
         "URL（生）",
     ]
     final_cols = [c for c in cols_order if c in out_df.columns]
     out_df = out_df[final_cols]
     out_df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
-    print("\n✅ ②B 完了（配布用CSV作成）")
+    print("\n✅ ②B 完了（配布用CSV作成・キーワード別ページ列）")
     print("出力:", out_csv)
+    print(f"キーワード列: {keyword_cols}")
     print("突合除外件数:", unmatched)
     print("空欄アラート件数:", alerts)
 

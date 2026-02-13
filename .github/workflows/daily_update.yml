@@ -60,6 +60,15 @@ jobs:
             --no-stop-on-empty-meta
         continue-on-error: true
 
+      # ── 4e. ⑥ PDFテキスト抽出 → JSON保存 ──
+      - name: Extract PDF text to JSON
+        run: |
+          python "⑥_pdf_text_extractor.py" \
+            --target "$TODAY" \
+            --save-root ./pdf_tmp \
+            --out-dir ./text_data \
+            --skip-existing
+
       # ── 4d. ③ XBRL取得 & 分析 → Excel生成 ──
       - name: Run XBRL analyzer
         run: |
@@ -82,7 +91,7 @@ jobs:
       - name: Merge index and copy detail JSONs
         run: |
           python -c "
-          import json, shutil, os
+          import json, shutil, os, datetime, re, glob
 
           # 既存データ読み込み
           with open('viewer/data/index.json', 'r', encoding='utf-8') as f:
@@ -128,7 +137,6 @@ jobs:
                       shutil.copy2(src, dst)
 
           # ②の結果CSVをコピー
-          import glob
           csv_dir = 'viewer/data/search'
           os.makedirs(csv_dir, exist_ok=True)
           for pattern in ['Analysis_Hits_free_word_*.csv', 'PDF_Search_Result_Distribution_free_word_*.csv']:
@@ -136,7 +144,41 @@ jobs:
                   dst = os.path.join(csv_dir, os.path.basename(src))
                   shutil.copy2(src, dst)
                   print(f'Copied search CSV: {os.path.basename(src)}')
+
+          # ⑥のテキストJSONをコピー
+          text_dir = 'viewer/data/text'
+          os.makedirs(text_dir, exist_ok=True)
+          if os.path.isdir('text_data'):
+              for fn in os.listdir('text_data'):
+                  if fn.startswith('text_') and fn.endswith('.json'):
+                      src = os.path.join('text_data', fn)
+                      dst = os.path.join(text_dir, fn)
+                      shutil.copy2(src, dst)
+                      print(f'Copied text JSON: {fn}')
+
+          # テキストJSONの一覧を作成（Streamlitアプリ用）
+          text_files = sorted([
+              fn.replace('text_', '').replace('.json', '')
+              for fn in os.listdir(text_dir)
+              if fn.startswith('text_') and fn.endswith('.json')
+          ])
+          index_path = os.path.join(text_dir, 'index.json')
+          with open(index_path, 'w', encoding='utf-8') as f:
+              json.dump({'dates': text_files, 'updated': datetime.datetime.now().isoformat(timespec='seconds')}, f, ensure_ascii=False)
+          print(f'Text index: {len(text_files)} dates')
+
+          # 半年より古いテキストJSONを削除
+          cutoff = (datetime.date.today() - datetime.timedelta(days=180)).strftime('%Y%m%d')
+          removed = 0
+          for fn in list(os.listdir(text_dir)):
+              m = re.match(r'text_(\d{8})\.json$', fn)
+              if m and m.group(1) < cutoff:
+                  os.remove(os.path.join(text_dir, fn))
+                  removed += 1
+          if removed:
+              print(f'Removed {removed} old text JSONs (before {cutoff})')
           "
+
 
       # ── 8. viewer リポジトリにpush ──
       - name: Push to viewer repo

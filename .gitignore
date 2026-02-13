@@ -27,6 +27,8 @@ Desktop.ini
 *.pdf
 *.csv
 TDnet_Downloads/
+text_data/
+COMMIT_MSG.txt
 
 # Streamlit secrets（パスワード等）
 .streamlit/secrets.toml
