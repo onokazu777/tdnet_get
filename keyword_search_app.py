@@ -10,18 +10,22 @@ TDnet PDFキーワード検索 Webアプリ (Streamlit)
   B) ローカルJSON     -- ⑥で事前抽出したJSONで高速検索
   C) クラウド         -- GitHub PagesのJSONで検索（一般公開用）
 
-PDFの閲覧:
-  ローカル検索 → ローカルPDFをOS標準ビューアーで開く（期間無制限）
-  クラウド検索 → TDnetリンクをブラウザで開く（約30日）
+PDFの閲覧（全モード共通で各行に「開く」リンク）:
+  ローカル → localhost経由でブラウザ表示（期間無制限）
+  クラウド → TDnetリンクでブラウザ表示（約30日）
 """
 
 import os
 import re
 import json
-import platform
-import subprocess
+import socket
+import threading
 import datetime
 import unicodedata
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from functools import partial
+from urllib.parse import quote
+
 import pandas as pd
 import streamlit as st
 
@@ -42,6 +46,40 @@ DEFAULT_PDF_ROOT = r"G:\マイドライブ\TDnet_Downloads"
 DEFAULT_TEXT_JSON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "text_data")
 GITHUB_PAGES_TEXT_BASE = "https://onokazu777.github.io/tdnet-viewer/data/text"
 PRIORITY_KEYWORDS = ["事業計画", "予想の修正", "決算短信", "説明資料", "月次", "資本コストや株価"]
+
+
+# ============================================================
+# ローカルPDF配信サーバー
+# ============================================================
+class _SilentHandler(SimpleHTTPRequestHandler):
+    """ログ出力を抑制したHTTPハンドラー"""
+    def log_message(self, format, *args):
+        pass  # 標準出力にログを出さない
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 0))
+        return s.getsockname()[1]
+
+
+def start_local_pdf_server(root_dir: str) -> int:
+    """ローカルPDFを配信するHTTPサーバーを起動し、ポート番号を返す"""
+    if "pdf_server_port" in st.session_state:
+        return st.session_state["pdf_server_port"]
+
+    port = _find_free_port()
+    handler = partial(_SilentHandler, directory=root_dir)
+    server = HTTPServer(("localhost", port), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    st.session_state["pdf_server_port"] = port
+    return port
+
+
+def local_pdf_url(port: int, date_str: str, pdf_filename: str) -> str:
+    """ローカルPDFのHTTP URL を構築"""
+    return f"http://localhost:{port}/{quote(date_str)}/{quote(pdf_filename)}"
 
 
 # ============================================================
@@ -70,16 +108,6 @@ def list_date_folders(root_path: str) -> list[str]:
         d for d in os.listdir(root_path)
         if os.path.isdir(os.path.join(root_path, d)) and re.fullmatch(r"\d{8}", d)
     ])
-
-
-def open_local_file(filepath: str):
-    """OSのデフォルトアプリでファイルを開く"""
-    if platform.system() == "Windows":
-        os.startfile(filepath)
-    elif platform.system() == "Darwin":
-        subprocess.Popen(["open", filepath])
-    else:
-        subprocess.Popen(["xdg-open", filepath])
 
 
 # ============================================================
@@ -121,7 +149,8 @@ def load_tdnet_meta(root_path: str, date_str: str) -> dict:
 
 
 def search_pdfs_local(
-    root_path: str, date_from: str, date_to: str, keywords: list[str], progress_callback=None,
+    root_path: str, date_from: str, date_to: str, keywords: list[str],
+    pdf_server_port: int = 0, progress_callback=None,
 ) -> pd.DataFrame:
     all_dates = list_date_folders(root_path)
     target_dates = [d for d in all_dates if date_from <= d <= date_to]
@@ -162,12 +191,12 @@ def search_pdfs_local(
                 code = extract_code_from_pdf_filename(pdf_name)
                 pdf_key = norm_key(pdf_name)
                 meta = meta_index.get(pdf_key, {})
+                pdf_url = local_pdf_url(pdf_server_port, d, pdf_name) if pdf_server_port else ""
                 row = {
                     "日付": d, "コード": code,
                     "企業名": meta.get("会社名", ""),
                     "分類": meta.get("分類", "その他"),
-                    "TDnet_URL": meta.get("URL", ""),
-                    "ローカルパス": pdf_path,
+                    "PDF": pdf_url,
                 }
                 for kw in keywords:
                     row[kw] = kw_result.get(kw, "")
@@ -222,9 +251,10 @@ def load_text_json_local(text_dir: str, date_str: str) -> dict:
 def search_text_json(
     date_from: str, date_to: str, keywords: list[str],
     available_dates: list[str], load_func,
-    pdf_root: str = "",
+    pdf_server_port: int = 0,
     progress_callback=None,
 ) -> pd.DataFrame:
+    """JSON経由キーワード検索。pdf_server_port > 0 ならローカルURL、0ならTDnet URL。"""
     target_dates = [d for d in available_dates if date_from <= d <= date_to]
     if not target_dates:
         return pd.DataFrame()
@@ -248,14 +278,16 @@ def search_text_json(
 
             if any(v for v in kw_result.values()):
                 pdf_name = file_info.get("pdf", "")
-                local_path = os.path.join(pdf_root, d, pdf_name) if pdf_root and pdf_name else ""
+                if pdf_server_port and pdf_name:
+                    pdf_url = local_pdf_url(pdf_server_port, d, pdf_name)
+                else:
+                    pdf_url = file_info.get("url", "")
                 row = {
                     "日付": d,
                     "コード": file_info.get("code", ""),
                     "企業名": file_info.get("company", ""),
                     "分類": file_info.get("category", "その他"),
-                    "TDnet_URL": file_info.get("url", ""),
-                    "ローカルパス": local_path,
+                    "PDF": pdf_url,
                 }
                 for kw in keywords:
                     row[kw] = kw_result.get(kw, "")
@@ -351,6 +383,11 @@ def main():
         else:
             st.warning("キーワードを1つ以上入力してください。")
 
+    # ----- ローカルPDF配信サーバー起動 -----
+    pdf_server_port = 0
+    if is_local and pdf_root:
+        pdf_server_port = start_local_pdf_server(pdf_root)
+
     # ----- メインエリア: 検索実行 -----
     if search_clicked and keywords_input:
         d_from = date_from.strftime("%Y%m%d")
@@ -366,30 +403,31 @@ def main():
                 st.error("PyMuPDF がインストールされていません。`pip install pymupdf`")
                 st.stop()
             def cb(c, t): progress_bar.progress(c / t if t else 0, text=f"PDF検索中... ({c}/{t})")
-            df = search_pdfs_local(pdf_root, d_from, d_to, keywords_input, progress_callback=cb)
+            df = search_pdfs_local(pdf_root, d_from, d_to, keywords_input,
+                                   pdf_server_port=pdf_server_port, progress_callback=cb)
         elif is_local_json:
             def cb(c, t): progress_bar.progress(c / t if t else 0, text=f"テキスト検索中... ({c}/{t}日)")
             df = search_text_json(
                 d_from, d_to, keywords_input, available_dates,
                 load_func=lambda d: load_text_json_local(text_json_dir, d),
-                pdf_root=pdf_root, progress_callback=cb,
+                pdf_server_port=pdf_server_port, progress_callback=cb,
             )
         else:
             def cb(c, t): progress_bar.progress(c / t if t else 0, text=f"クラウド読み込み中... ({c}/{t}日)")
             df = search_text_json(
                 d_from, d_to, keywords_input, available_dates,
-                load_func=load_text_json_remote, progress_callback=cb,
+                load_func=load_text_json_remote,
+                pdf_server_port=0,  # クラウドはTDnet URL
+                progress_callback=cb,
             )
 
         progress_bar.empty()
         st.session_state["search_results"] = df
         st.session_state["search_keywords"] = keywords_input
-        st.session_state["search_is_local"] = is_local
 
-    # ----- メインエリア: 結果表示 -----
+    # ----- メインエリア: 結果表示（全モード共通） -----
     df = st.session_state.get("search_results")
     keywords_display = st.session_state.get("search_keywords", [])
-    result_is_local = st.session_state.get("search_is_local", False)
 
     if df is not None:
         if df.empty:
@@ -405,84 +443,35 @@ def main():
             filtered_df = df[df["分類"].isin(selected_categories)] if selected_categories else df
             st.metric("ヒット数", f"{len(filtered_df)} 件 / 全 {len(df)} 件")
 
-            # 表示用DataFrame作成
-            display_df = filtered_df.copy().reset_index(drop=True)
-            display_df["日付表示"] = display_df["日付"].apply(
-                lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
-            )
-
-            if result_is_local:
-                # ===== ローカルモード: テーブル + 選択して開く =====
-                table_cols = ["日付表示", "コード", "企業名", "分類"] + keywords_display
-                table_df = display_df[[c for c in table_cols if c in display_df.columns]].copy()
-                table_df = table_df.rename(columns={"日付表示": "日付"})
-
-                st.dataframe(
-                    table_df, use_container_width=True, hide_index=True,
-                    height=min(len(table_df) * 40 + 40, 600),
-                )
-
-                # PDF選択 & 開くボタン
-                st.markdown("---")
-                st.markdown("**PDFを開く**（ローカルファイル）")
-
-                # 選択肢を作成
-                options = []
-                for i, (_, row) in enumerate(filtered_df.iterrows()):
-                    d = row.get("日付", "")
-                    code = row.get("コード", "")
-                    name = row.get("企業名", "")
-                    cat = row.get("分類", "")
-                    label = f"{d}  [{code}] {name}（{cat}）"
-                    options.append(label)
-
-                if options:
-                    selected_idx = st.selectbox(
-                        "PDFを選択",
-                        range(len(options)),
-                        format_func=lambda i: options[i],
-                        label_visibility="collapsed",
-                    )
-
-                    sel_row = filtered_df.iloc[selected_idx]
-                    pdf_path = sel_row.get("ローカルパス", "")
-
-                    col_btn, col_info = st.columns([1, 5])
-                    with col_btn:
-                        if st.button("PDFを開く", type="primary", use_container_width=True):
-                            if pdf_path and os.path.exists(pdf_path):
-                                open_local_file(pdf_path)
-                                st.toast("PDFを開きました", icon="📄")
-                            elif pdf_path:
-                                st.error(f"ファイルが見つかりません:\n{pdf_path}")
-                            else:
-                                st.error("ファイルパスがありません")
-                    with col_info:
-                        st.caption(pdf_path)
-
-            else:
-                # ===== クラウドモード: TDnetリンク付きテーブル =====
-                display_df["PDF"] = display_df["TDnet_URL"]
-                table_cols = ["日付表示", "コード", "企業名", "分類", "PDF"] + keywords_display
-                table_df = display_df[[c for c in table_cols if c in display_df.columns]].copy()
-                table_df = table_df.rename(columns={"日付表示": "日付"})
-
-                st.dataframe(
-                    table_df, use_container_width=True, hide_index=True,
-                    height=min(len(table_df) * 40 + 40, 600),
-                    column_config={
-                        "PDF": st.column_config.LinkColumn("PDF", display_text="開く"),
-                    },
-                )
-                st.caption("※ TDnetのPDFリンクは公開から約30日で無効になります。")
-
-            # CSVダウンロード（共通）
+            # CSVダウンロード（一番上）
             csv_data = filtered_df.to_csv(index=False, encoding="utf-8-sig")
             st.download_button(
                 label="結果をCSVダウンロード", data=csv_data,
                 file_name=f"keyword_search_{date_from.strftime('%Y%m%d')}_{date_to.strftime('%Y%m%d')}.csv",
                 mime="text/csv",
             )
+
+            # 表示用DataFrame（全モード共通）
+            display_df = filtered_df.copy().reset_index(drop=True)
+            display_df["日付"] = display_df["日付"].apply(
+                lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
+            )
+
+            table_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
+            table_df = display_df[[c for c in table_cols if c in display_df.columns]]
+
+            st.dataframe(
+                table_df,
+                use_container_width=True,
+                hide_index=True,
+                height=min(len(table_df) * 40 + 40, 600),
+                column_config={
+                    "PDF": st.column_config.LinkColumn("PDF", display_text="開く"),
+                },
+            )
+
+            if is_cloud:
+                st.caption("※ TDnetのPDFリンクは公開から約30日で無効になります。")
 
     elif df is None:
         st.info("左のサイドバーでキーワードと期間を設定し、「検索開始」ボタンを押してください。")
