@@ -15,6 +15,9 @@ TDnet PDFキーワード検索 Webアプリ (Streamlit)
 import os
 import re
 import json
+import sys
+import platform
+import subprocess
 import datetime
 import unicodedata
 import pandas as pd
@@ -279,6 +282,22 @@ def search_text_json(
 
 
 # ============================================================
+# ローカルファイルを開く
+# ============================================================
+def _open_local_file(filepath: str):
+    """OSのデフォルトアプリでファイルを開く"""
+    try:
+        if platform.system() == "Windows":
+            os.startfile(filepath)
+        elif platform.system() == "Darwin":  # macOS
+            subprocess.Popen(["open", filepath])
+        else:  # Linux
+            subprocess.Popen(["xdg-open", filepath])
+    except Exception as e:
+        st.error(f"ファイルを開けませんでした: {e}")
+
+
+# ============================================================
 # Streamlit UI
 # ============================================================
 def main():
@@ -458,10 +477,21 @@ def main():
 
         progress_bar.empty()
 
+        # 検索結果をsession_stateに保存（行選択時の再実行で消えないように）
+        st.session_state["search_results"] = df
+        st.session_state["search_keywords"] = keywords_input
+        st.session_state["search_link_mode"] = link_mode
+
+    # ----- 結果表示（session_stateから） -----
+    df = st.session_state.get("search_results")
+    keywords_display = st.session_state.get("search_keywords", [])
+    link_mode_display = st.session_state.get("search_link_mode", "TDnet")
+
+    if df is not None:
         if df.empty:
             st.info("ヒットするPDFはありませんでした。")
         else:
-            use_tdnet_link = "TDnet" in link_mode
+            use_tdnet_link = "TDnet" in link_mode_display
 
             # 分類フィルタ
             all_categories = sorted(df["分類"].unique().tolist())
@@ -473,39 +503,69 @@ def main():
             st.metric("ヒット数", f"{len(filtered_df)} 件 / 全 {len(df)} 件")
 
             # 表示用DataFrame
-            display_df = filtered_df.copy()
+            display_df = filtered_df.copy().reset_index(drop=True)
             display_df["日付"] = display_df["日付"].apply(
                 lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
             )
 
-            # PDFリンク列の構築
+            # --- TDnetリンクモード: リンク付きテーブル ---
             if use_tdnet_link:
                 display_df["PDF"] = display_df["TDnet_URL"].apply(
                     lambda u: u if u else ""
                 )
+                display_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
+                display_df = display_df[[c for c in display_cols if c in display_df.columns]]
+
+                st.dataframe(
+                    display_df, use_container_width=True, hide_index=True,
+                    height=min(len(display_df) * 40 + 40, 600),
+                    column_config={
+                        "PDF": st.column_config.LinkColumn(
+                            "PDF", display_text="開く",
+                            help="TDnetのPDFリンク",
+                        ),
+                    },
+                )
+                st.caption("※ TDnetのPDFリンクは公開から約30日で無効になります。")
+
+            # --- ローカルファイルモード: 行選択でPDFを開く ---
             else:
-                display_df["PDF"] = display_df["ローカルパス"].apply(
-                    lambda p: f"file:///{p.replace(os.sep, '/')}" if p else ""
+                display_cols = ["日付", "コード", "企業名", "分類"] + keywords_display
+                table_df = display_df[[c for c in display_cols if c in display_df.columns]]
+
+                event = st.dataframe(
+                    table_df, use_container_width=True, hide_index=True,
+                    height=min(len(table_df) * 40 + 40, 600),
+                    on_select="rerun",
+                    selection_mode="single-row",
                 )
 
-            # リンクが空の行を確認
-            has_links = display_df["PDF"].str.len() > 0
+                # 選択された行のPDFを開く
+                selected_rows = event.selection.rows if event.selection else []
 
-            display_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_input
-            display_df = display_df[[c for c in display_cols if c in display_df.columns]]
+                if selected_rows:
+                    sel_idx = selected_rows[0]
+                    sel_row = filtered_df.iloc[sel_idx]
+                    pdf_path = sel_row.get("ローカルパス", "")
+                    company = sel_row.get("企業名", "")
+                    category = sel_row.get("分類", "")
 
-            col_config = {}
-            if has_links.any():
-                col_config["PDF"] = st.column_config.LinkColumn(
-                    "PDF", display_text="開く",
-                    help="TDnetリンク" if use_tdnet_link else "ローカルファイル",
-                )
+                    st.markdown(f"**選択中:** {company}（{category}）")
 
-            st.dataframe(
-                display_df, use_container_width=True, hide_index=True,
-                height=min(len(display_df) * 40 + 40, 600),
-                column_config=col_config,
-            )
+                    col_open, col_path = st.columns([1, 4])
+                    with col_open:
+                        if st.button("PDFを開く", type="primary", use_container_width=True):
+                            if pdf_path and os.path.exists(pdf_path):
+                                _open_local_file(pdf_path)
+                                st.success("PDFを開きました")
+                            elif pdf_path:
+                                st.error(f"ファイルが見つかりません: {pdf_path}")
+                            else:
+                                st.error("ファイルパスがありません")
+                    with col_path:
+                        st.code(pdf_path, language=None)
+                else:
+                    st.caption("テーブルの行をクリックするとPDFを開けます。")
 
             # CSVダウンロード
             csv_data = filtered_df.to_csv(index=False, encoding="utf-8-sig")
@@ -514,10 +574,7 @@ def main():
                 file_name=f"keyword_search_{d_from}_{d_to}.csv", mime="text/csv",
             )
 
-            if use_tdnet_link:
-                st.caption("※ TDnetのPDFリンクは公開から約30日で無効になります。")
-
-    elif not search_clicked:
+    elif df is None:
         st.info("左のサイドバーでキーワードと期間を設定し、「検索開始」ボタンを押してください。")
 
 
