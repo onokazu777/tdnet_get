@@ -8,7 +8,8 @@ TDnet PDFキーワード検索 Webアプリ (Streamlit)
 
 動作モード:
   A) ローカルPDF直読み -- PyMuPDFでPDFを直接スキャン（個人用）
-  B) JSON経由検索     -- 事前抽出済みテキストJSONで検索（一般公開用、PDF不要）
+  B) ローカルJSON検索  -- ⑥で事前抽出済みテキストJSONで高速検索（個人用）
+  C) クラウドJSON検索   -- GitHub PagesのテキストJSONで検索（一般公開用、PDF不要）
 """
 
 import os
@@ -70,7 +71,7 @@ def list_date_folders(root_path: str) -> list[str]:
 
 
 # ============================================================
-# データソース: ローカルPDF直読み
+# データソース A: ローカルPDF直読み
 # ============================================================
 def load_tdnet_meta(root_path: str, date_str: str) -> dict:
     day_csv = os.path.join(root_path, date_str, f"TDnet_Sorted_{date_str}.csv")
@@ -171,7 +172,7 @@ def search_pdfs_local(
 
 
 # ============================================================
-# データソース: JSON経由検索（クラウド対応）
+# データソース B/C: JSON経由検索（ローカルJSON / クラウドJSON）
 # ============================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_text_index_remote() -> list[str]:
@@ -187,7 +188,6 @@ def fetch_text_index_remote() -> list[str]:
 
 
 def list_text_json_dates_local(text_dir: str) -> list[str]:
-    """ローカルのテキストJSONディレクトリから日付一覧を取得"""
     if not os.path.isdir(text_dir):
         return []
     dates = []
@@ -200,7 +200,6 @@ def list_text_json_dates_local(text_dir: str) -> list[str]:
 
 @st.cache_data(ttl=600, show_spinner=False)
 def load_text_json_remote(date_str: str) -> dict:
-    """GitHub Pages からテキストJSONを取得"""
     url = f"{GITHUB_PAGES_TEXT_BASE}/text_{date_str}.json"
     try:
         resp = _requests.get(url, timeout=30)
@@ -211,7 +210,6 @@ def load_text_json_remote(date_str: str) -> dict:
 
 
 def load_text_json_local(text_dir: str, date_str: str) -> dict:
-    """ローカルのテキストJSONを読み込む"""
     path = os.path.join(text_dir, f"text_{date_str}.json")
     if not os.path.exists(path):
         return {}
@@ -221,9 +219,14 @@ def load_text_json_local(text_dir: str, date_str: str) -> dict:
 
 def search_text_json(
     date_from: str, date_to: str, keywords: list[str],
-    available_dates: list[str], load_func, progress_callback=None,
+    available_dates: list[str], load_func,
+    pdf_root: str = "",
+    progress_callback=None,
 ) -> pd.DataFrame:
-    """事前抽出テキストJSONでキーワード検索"""
+    """事前抽出テキストJSONでキーワード検索
+
+    pdf_root が指定されていれば、ローカルパスも構築する。
+    """
     target_dates = [d for d in available_dates if date_from <= d <= date_to]
     if not target_dates:
         return pd.DataFrame()
@@ -251,13 +254,19 @@ def search_text_json(
 
             has_any_hit = any(v for v in kw_result.values())
             if has_any_hit:
+                pdf_name = file_info.get("pdf", "")
+                # ローカルパスの構築（pdf_rootが指定されている場合）
+                local_path = ""
+                if pdf_root and pdf_name:
+                    local_path = os.path.join(pdf_root, d, pdf_name)
+
                 row = {
                     "日付": d,
                     "コード": file_info.get("code", ""),
                     "企業名": file_info.get("company", ""),
                     "分類": file_info.get("category", "その他"),
                     "TDnet_URL": file_info.get("url", ""),
-                    "ローカルパス": "",
+                    "ローカルパス": local_path,
                 }
                 for kw in keywords:
                     row[kw] = kw_result.get(kw, "")
@@ -282,17 +291,30 @@ def main():
     with st.sidebar:
         st.header("検索条件")
 
-        # データソース切り替え
+        # データソース切り替え（3モード）
         data_source = st.radio(
             "データソース",
-            options=["ローカルPDF（個人用）", "クラウド（一般公開用）"],
+            options=[
+                "ローカルPDF（直接検索）",
+                "ローカルJSON（高速検索）",
+                "クラウド（一般公開用）",
+            ],
             index=0,
-            help="ローカル: PCのPDFを直接検索。クラウド: GitHub Pagesの事前抽出データで検索（PDF不要）。",
+            help=(
+                "ローカルPDF: PCのPDFを直接検索（遅いが確実）\n"
+                "ローカルJSON: ⑥で事前抽出したテキストで高速検索\n"
+                "クラウド: GitHub Pagesのデータで検索（PDF不要）"
+            ),
         )
+
+        is_local_pdf = "ローカルPDF" in data_source
+        is_local_json = "ローカルJSON" in data_source
         is_cloud = "クラウド" in data_source
 
-        if not is_cloud:
-            # ローカルモード設定
+        # --- 各モード別の設定 ---
+        pdf_root = ""
+
+        if is_local_pdf:
             pdf_root = st.text_input(
                 "PDFフォルダパス", value=DEFAULT_PDF_ROOT,
                 help="①でダウンロードしたPDFが保存されているフォルダ",
@@ -302,18 +324,34 @@ def main():
                 st.warning(f"PDFフォルダが見つかりません: {pdf_root}")
                 st.stop()
 
-            # テキストJSONもローカルにあるかチェック
-            text_json_dir = DEFAULT_TEXT_JSON_DIR
-            text_dates = list_text_json_dates_local(text_json_dir)
-        else:
-            # クラウドモード設定
-            pdf_root = ""
+        elif is_local_json:
+            pdf_root = st.text_input(
+                "PDFフォルダパス（リンク用）", value=DEFAULT_PDF_ROOT,
+                help="PDFリンクに使用するフォルダパス",
+            )
+            text_json_dir = st.text_input(
+                "テキストJSONフォルダ", value=DEFAULT_TEXT_JSON_DIR,
+                help="⑥で抽出したテキストJSONのフォルダ",
+            )
+            available_dates = list_text_json_dates_local(text_json_dir)
+            if not available_dates:
+                st.warning(
+                    f"テキストJSONが見つかりません: {text_json_dir}\n\n"
+                    "⑥_pdf_text_extractor.py を先に実行してください。"
+                )
+                st.stop()
+
+        else:  # is_cloud
             with st.spinner("利用可能な日付を確認中..."):
                 available_dates = fetch_text_index_remote()
             if not available_dates:
-                st.warning("クラウドにテキストデータが見つかりません。まだGitHub Actionsが実行されていない可能性があります。")
+                st.warning(
+                    "クラウドにテキストデータが見つかりません。\n\n"
+                    "GitHub Actions の手動実行が必要です:\n"
+                    "1. GitHub → tdnet_get → Actions\n"
+                    "2. 'Daily XBRL Update' → Run workflow"
+                )
                 st.stop()
-            text_dates = available_dates
 
         st.info(f"利用可能: {available_dates[0]} 〜 {available_dates[-1]}（{len(available_dates)}日分）")
 
@@ -345,16 +383,16 @@ def main():
 
         st.divider()
 
-        # リンク先（ローカルモード時のみ選択可能）
-        if not is_cloud:
+        # PDFリンク先
+        if is_cloud:
+            link_mode = "TDnet"
+            st.caption("リンク先: TDnet（公開リンク）")
+        else:
             link_mode = st.radio(
                 "PDFリンク先",
-                options=["TDnet（一般公開用）", "ローカルファイル（個人用）"],
-                index=0,
+                options=["TDnet", "ローカルファイル"],
+                index=1,  # ローカルモードのデフォルトはローカルファイル
             )
-        else:
-            link_mode = "TDnet（一般公開用）"
-            st.caption("リンク先: TDnet")
 
         st.divider()
         search_clicked = st.button("検索開始", type="primary", use_container_width=True)
@@ -376,48 +414,47 @@ def main():
         st.subheader(f"検索結果: {d_from} 〜 {d_to}")
         progress_bar = st.progress(0, text="検索中...")
 
-        # 検索実行
-        if is_cloud:
-            # クラウドモード: GitHub PagesのJSON
+        # ========== 検索実行 ==========
+        if is_local_pdf:
+            # モードA: ローカルPDF直読み
+            if fitz is None:
+                st.error("PyMuPDF がインストールされていません。`pip install pymupdf` を実行してください。")
+                st.stop()
+
             def update_progress(current, total):
                 pct = current / total if total > 0 else 0
-                progress_bar.progress(pct, text=f"テキストデータ読み込み中... ({current}/{total}日)")
+                progress_bar.progress(pct, text=f"PDF検索中... ({current}/{total})")
+
+            df = search_pdfs_local(
+                pdf_root, d_from, d_to, keywords_input,
+                progress_callback=update_progress,
+            )
+
+        elif is_local_json:
+            # モードB: ローカルJSON高速検索
+            def update_progress(current, total):
+                pct = current / total if total > 0 else 0
+                progress_bar.progress(pct, text=f"テキストデータ検索中... ({current}/{total}日)")
+
+            df = search_text_json(
+                d_from, d_to, keywords_input, available_dates,
+                load_func=lambda d: load_text_json_local(text_json_dir, d),
+                pdf_root=pdf_root,
+                progress_callback=update_progress,
+            )
+
+        else:
+            # モードC: クラウドJSON検索
+            def update_progress(current, total):
+                pct = current / total if total > 0 else 0
+                progress_bar.progress(pct, text=f"クラウドデータ読み込み中... ({current}/{total}日)")
 
             df = search_text_json(
                 d_from, d_to, keywords_input, available_dates,
                 load_func=load_text_json_remote,
+                pdf_root="",
                 progress_callback=update_progress,
             )
-        else:
-            # ローカルモード: テキストJSONがあればそれを使用、なければPDF直読み
-            local_target_dates = [d for d in available_dates if d_from <= d <= d_to]
-            local_text_dates = [d for d in local_target_dates if d in text_dates]
-
-            if len(local_text_dates) == len(local_target_dates) and local_text_dates:
-                # テキストJSONが全日付分ある → 高速JSON検索
-                def update_progress(current, total):
-                    pct = current / total if total > 0 else 0
-                    progress_bar.progress(pct, text=f"テキストデータ検索中... ({current}/{total}日)")
-
-                df = search_text_json(
-                    d_from, d_to, keywords_input, text_dates,
-                    load_func=lambda d: load_text_json_local(DEFAULT_TEXT_JSON_DIR, d),
-                    progress_callback=update_progress,
-                )
-            else:
-                # PDF直読み
-                if fitz is None:
-                    st.error("PyMuPDF (fitz) がインストールされていません。`pip install pymupdf` を実行してください。")
-                    st.stop()
-
-                def update_progress(current, total):
-                    pct = current / total if total > 0 else 0
-                    progress_bar.progress(pct, text=f"PDF検索中... ({current}/{total})")
-
-                df = search_pdfs_local(
-                    pdf_root, d_from, d_to, keywords_input,
-                    progress_callback=update_progress,
-                )
 
         progress_bar.empty()
 
@@ -441,23 +478,33 @@ def main():
                 lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
             )
 
-            # PDFリンク列
+            # PDFリンク列の構築
             if use_tdnet_link:
-                display_df["PDF"] = display_df["TDnet_URL"]
+                display_df["PDF"] = display_df["TDnet_URL"].apply(
+                    lambda u: u if u else ""
+                )
             else:
                 display_df["PDF"] = display_df["ローカルパス"].apply(
                     lambda p: f"file:///{p.replace(os.sep, '/')}" if p else ""
                 )
 
+            # リンクが空の行を確認
+            has_links = display_df["PDF"].str.len() > 0
+
             display_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_input
             display_df = display_df[[c for c in display_cols if c in display_df.columns]]
+
+            col_config = {}
+            if has_links.any():
+                col_config["PDF"] = st.column_config.LinkColumn(
+                    "PDF", display_text="開く",
+                    help="TDnetリンク" if use_tdnet_link else "ローカルファイル",
+                )
 
             st.dataframe(
                 display_df, use_container_width=True, hide_index=True,
                 height=min(len(display_df) * 40 + 40, 600),
-                column_config={
-                    "PDF": st.column_config.LinkColumn("PDF", display_text="開く"),
-                },
+                column_config=col_config,
             )
 
             # CSVダウンロード
