@@ -459,14 +459,18 @@ def main():
                 lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
             )
             # CSV用: ExcelのHYPERLINK関数でクリック可能なリンクにする
-            # TDnet URL優先（一般公開向け）、無ければローカルパス
+            # ローカルモード → ローカルファイルパス、クラウドモード → TDnet URL
             def _make_hyperlink(row):
                 tdnet_url = row.get("TDnet_URL", "")
                 local_path = row.get("ローカルパス", "")
-                if tdnet_url and tdnet_url.startswith("http"):
-                    return f'=HYPERLINK("{tdnet_url}","開く")'
-                elif local_path:
-                    return f'=HYPERLINK("{local_path}","開く")'
+                if is_local:
+                    # ローカルPDF/ローカルJSON → ローカルファイルのリンク
+                    if local_path:
+                        return f'=HYPERLINK("{local_path}","開く")'
+                else:
+                    # クラウド → TDnetリンク
+                    if tdnet_url and tdnet_url.startswith("http"):
+                        return f'=HYPERLINK("{tdnet_url}","開く")'
                 return ""
             csv_export["PDF"] = csv_export.apply(_make_hyperlink, axis=1)
             csv_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
