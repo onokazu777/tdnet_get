@@ -314,24 +314,31 @@ def main():
     st.title("TDnet PDFキーワード検索")
     st.caption("TDnet適時開示PDFから、指定キーワードが記述されているページを検索します。")
 
+    # ----- デプロイモード判定 -----
+    # 環境変数 TDNET_DEPLOY_MODE=cloud → 一般公開用（クラウドのみ）
+    # 未設定 or local → 個人用（ローカルPDF / ローカルJSON）
+    deploy_mode = os.environ.get("TDNET_DEPLOY_MODE", "local")
+
     # ----- サイドバー -----
     with st.sidebar:
         st.header("検索条件")
 
-        data_source = st.radio(
-            "データソース",
-            options=[
-                "ローカルPDF（直接検索）",
-                "ローカルJSON（高速検索）",
-                "クラウド（一般公開用）",
-            ],
-            index=0,
-            help=(
-                "ローカルPDF: PCのPDFを直接検索（遅いが確実）\n"
-                "ローカルJSON: ⑥で事前抽出したテキストで高速検索\n"
-                "クラウド: GitHub Pagesのデータで検索（PDF不要）"
-            ),
-        )
+        if deploy_mode == "cloud":
+            data_source = "クラウド（一般公開用）"
+            st.info("クラウドデータで検索します")
+        else:
+            data_source = st.radio(
+                "データソース",
+                options=[
+                    "ローカルPDF（直接検索）",
+                    "ローカルJSON（高速検索）",
+                ],
+                index=1,
+                help=(
+                    "ローカルPDF: PCのPDFを直接検索（遅いが確実）\n"
+                    "ローカルJSON: ⑥で事前抽出したテキストで高速検索"
+                ),
+            )
         is_local_pdf = "ローカルPDF" in data_source
         is_local_json = "ローカルJSON" in data_source
         is_cloud = "クラウド" in data_source
