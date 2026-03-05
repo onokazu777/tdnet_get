@@ -21,6 +21,7 @@ import json
 import socket
 import threading
 import datetime
+from bisect import bisect_left
 import unicodedata
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
@@ -38,6 +39,11 @@ try:
     import fitz  # PyMuPDF
 except ImportError:
     fitz = None
+
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
 
 # ============================================================
 # 設定
@@ -108,6 +114,211 @@ def list_date_folders(root_path: str) -> list[str]:
         d for d in os.listdir(root_path)
         if os.path.isdir(os.path.join(root_path, d)) and re.fullmatch(r"\d{8}", d)
     ])
+
+
+def normalize_stock_code(code: str) -> str:
+    s = norm_key(code).upper().replace(".0", "")
+    return s if re.fullmatch(r"[0-9A-Z]{4}", s) else ""
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def fetch_daily_closes_from_yahoo(code: str, min_date: str, max_date: str) -> list[tuple[str, float]]:
+    """指定銘柄の終値リスト [(YYYYMMDD, close), ...] を返す。"""
+    if yf is None:
+        return []
+    norm_code = normalize_stock_code(code)
+    if not norm_code:
+        return []
+    ticker = f"{norm_code}.T"
+    start_dt = datetime.datetime.strptime(min_date, "%Y%m%d").date() - datetime.timedelta(days=7)
+    end_dt = datetime.datetime.strptime(max_date, "%Y%m%d").date() + datetime.timedelta(days=45)
+    try:
+        hist = yf.download(
+            ticker,
+            start=start_dt.isoformat(),
+            end=end_dt.isoformat(),
+            interval="1d",
+            progress=False,
+            auto_adjust=False,
+        )
+    except Exception:
+        return []
+    if hist is None or hist.empty:
+        return []
+    close_col = "Adj Close"
+    close_series = None
+    if isinstance(hist.columns, pd.MultiIndex):
+        if (close_col, ticker) in hist.columns:
+            close_series = hist[(close_col, ticker)]
+        elif ("Close", ticker) in hist.columns:
+            close_series = hist[("Close", ticker)]
+        elif close_col in hist.columns.get_level_values(0):
+            tmp = hist.xs(close_col, axis=1, level=0)
+            close_series = tmp.iloc[:, 0] if isinstance(tmp, pd.DataFrame) else tmp
+        elif "Close" in hist.columns.get_level_values(0):
+            tmp = hist.xs("Close", axis=1, level=0)
+            close_series = tmp.iloc[:, 0] if isinstance(tmp, pd.DataFrame) else tmp
+    else:
+        if close_col in hist.columns:
+            close_series = hist[close_col]
+        elif "Close" in hist.columns:
+            close_series = hist["Close"]
+    if close_series is None:
+        return []
+    close_series = close_series.dropna()
+    if close_series.empty:
+        return []
+    out = []
+    for idx, val in close_series.items():
+        # yfinanceの返却型差異対策: DatetimeIndex以外でも日付文字列へ正規化する
+        dt = pd.to_datetime(idx, errors="coerce")
+        if pd.isna(dt):
+            continue
+        out.append((dt.strftime("%Y%m%d"), float(val)))
+    return out
+
+
+@st.cache_data(ttl=21600, show_spinner=False)
+def fetch_daily_closes_batch_from_yahoo(
+    codes: tuple[str, ...], min_date: str, max_date: str
+) -> dict[str, list[tuple[str, float]]]:
+    """複数銘柄の終値を一括取得して返す。keyは正規化後コード。"""
+    if yf is None:
+        return {}
+    norm_codes = []
+    for c in codes:
+        n = normalize_stock_code(c)
+        if n and n not in norm_codes:
+            norm_codes.append(n)
+    if not norm_codes:
+        return {}
+    if len(norm_codes) == 1:
+        c = norm_codes[0]
+        return {c: fetch_daily_closes_from_yahoo(c, min_date, max_date)}
+
+    ticker_by_code = {c: f"{c}.T" for c in norm_codes}
+    start_dt = datetime.datetime.strptime(min_date, "%Y%m%d").date() - datetime.timedelta(days=7)
+    end_dt = datetime.datetime.strptime(max_date, "%Y%m%d").date() + datetime.timedelta(days=45)
+    try:
+        hist = yf.download(
+            " ".join(ticker_by_code.values()),
+            start=start_dt.isoformat(),
+            end=end_dt.isoformat(),
+            interval="1d",
+            progress=False,
+            auto_adjust=False,
+            threads=True,
+        )
+    except Exception:
+        return {}
+    if hist is None or hist.empty:
+        return {}
+
+    out: dict[str, list[tuple[str, float]]] = {}
+    for code, ticker in ticker_by_code.items():
+        close_series = None
+        if isinstance(hist.columns, pd.MultiIndex):
+            if ("Adj Close", ticker) in hist.columns:
+                close_series = hist[("Adj Close", ticker)]
+            elif ("Close", ticker) in hist.columns:
+                close_series = hist[("Close", ticker)]
+        if close_series is None:
+            # 返却形式が単一銘柄/単一列だった場合の後方互換
+            if "Adj Close" in hist.columns:
+                close_series = hist["Adj Close"]
+            elif "Close" in hist.columns:
+                close_series = hist["Close"]
+        if close_series is None:
+            out[code] = []
+            continue
+        close_series = close_series.dropna()
+        rows = []
+        for idx, val in close_series.items():
+            dt = pd.to_datetime(idx, errors="coerce")
+            if pd.isna(dt):
+                continue
+            rows.append((dt.strftime("%Y%m%d"), float(val)))
+        out[code] = rows
+    return out
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_shares_outstanding_from_yahoo(code: str) -> float | None:
+    """発行済株式数を返す。取得不可時はNone。"""
+    if yf is None:
+        return None
+    norm_code = normalize_stock_code(code)
+    if not norm_code:
+        return None
+    ticker = f"{norm_code}.T"
+    value = None
+    try:
+        info = yf.Ticker(ticker).get_info()
+        value = info.get("sharesOutstanding")
+    except Exception:
+        value = None
+    if not value:
+        try:
+            finfo = yf.Ticker(ticker).fast_info
+            value = finfo.get("shares") or finfo.get("shares_outstanding")
+        except Exception:
+            value = None
+    try:
+        f = float(value)
+        return f if f > 0 else None
+    except Exception:
+        return None
+
+
+def calc_forward_returns(df: pd.DataFrame, offsets: list[int], add_market_cap: bool = False) -> pd.DataFrame:
+    """検索結果DataFrameにN営業日後騰落率(%)と発表日時価総額(億円)を追加して返す。"""
+    if df.empty or "コード" not in df.columns or "日付" not in df.columns:
+        return df
+    out = df.copy()
+    for n in offsets:
+        out[f"{n}営業日騰落率(%)"] = ""
+    if add_market_cap:
+        out["発表日時価総額(億円)"] = ""
+
+    unique_dates = [d for d in out["日付"].astype(str).tolist() if re.fullmatch(r"\d{8}", d)]
+    if not unique_dates:
+        return out
+    min_date = min(unique_dates)
+    max_date = max(unique_dates)
+
+    codes_raw = out["コード"].astype(str).tolist()
+    codes_norm = sorted(set(normalize_stock_code(c) for c in codes_raw if normalize_stock_code(c)))
+    closes_by_code = fetch_daily_closes_batch_from_yahoo(tuple(codes_norm), min_date, max_date)
+
+    code_series_norm = out["コード"].astype(str).map(normalize_stock_code)
+    for norm_code in codes_norm:
+        if not norm_code:
+            continue
+        closes = closes_by_code.get(norm_code, [])
+        if not closes:
+            continue
+        shares_outstanding = fetch_shares_outstanding_from_yahoo(norm_code) if add_market_cap else None
+        trading_dates = [d for d, _ in closes]
+        prices = [p for _, p in closes]
+        target_rows = out.index[code_series_norm == norm_code].tolist()
+        for row_idx in target_rows:
+            ann_date = str(out.at[row_idx, "日付"])
+            pos = bisect_left(trading_dates, ann_date)
+            if pos >= len(trading_dates):
+                continue
+            base_price = prices[pos]
+            if base_price <= 0:
+                continue
+            if add_market_cap and shares_outstanding:
+                market_cap_oku = (base_price * shares_outstanding) / 1e8
+                out.at[row_idx, "発表日時価総額(億円)"] = f"{market_cap_oku:,.2f}"
+            for n in offsets:
+                if pos + n >= len(prices):
+                    continue
+                target_price = prices[pos + n]
+                ret = (target_price - base_price) / base_price * 100.0
+                out.at[row_idx, f"{n}営業日騰落率(%)"] = f"{ret:.2f}"
+    return out
 
 
 # ============================================================
@@ -393,6 +604,23 @@ def main():
                 keywords_input.append(kw.strip())
 
         st.divider()
+        add_price_returns = st.checkbox(
+            "株価騰落率を計算（5営業日後/20営業日後）",
+            value=False,
+            help="Yahoo Financeの終値を使って、発表日基準の騰落率を算出します。",
+        )
+        add_market_cap_only = st.checkbox(
+            "発表日時価総額を追加（単独表示）",
+            value=False,
+            help="発表日以降の最初の取引日終値 × 発行済株式数（Yahoo Finance）で算出します。",
+        )
+        add_market_cap = add_price_returns or add_market_cap_only
+        if add_price_returns:
+            st.caption("※ 騰落率を計算する場合、発表日時価総額も自動で表示します。")
+        if (add_price_returns or add_market_cap_only) and yf is None:
+            st.warning("yfinance が未インストールです。`pip install yfinance` を実行してください。")
+
+        st.divider()
         search_clicked = st.button("検索開始", type="primary", use_container_width=True)
         if keywords_input:
             st.caption(f"キーワード: {', '.join(keywords_input)}")
@@ -438,12 +666,21 @@ def main():
             )
 
         progress_bar.empty()
+        if (add_price_returns or add_market_cap) and not df.empty and yf is not None:
+            spinner_text = "株価騰落率・時価総額を計算中..." if add_price_returns else "発表日時価総額を計算中..."
+            with st.spinner(spinner_text):
+                offsets = [5, 20] if add_price_returns else []
+                df = calc_forward_returns(df, offsets=offsets, add_market_cap=add_market_cap)
         st.session_state["search_results"] = df
         st.session_state["search_keywords"] = keywords_input
+        st.session_state["add_price_returns"] = add_price_returns
+        st.session_state["add_market_cap"] = add_market_cap
 
     # ----- メインエリア: 結果表示（全モード共通） -----
     df = st.session_state.get("search_results")
     keywords_display = st.session_state.get("search_keywords", [])
+    add_price_returns = st.session_state.get("add_price_returns", False)
+    add_market_cap = st.session_state.get("add_market_cap", False)
 
     if df is not None:
         if df.empty:
@@ -480,7 +717,11 @@ def main():
                         return f'=HYPERLINK("{tdnet_url}","開く")'
                 return ""
             csv_export["PDF"] = csv_export.apply(_make_hyperlink, axis=1)
-            csv_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
+            ret_cols = []
+            if add_price_returns:
+                ret_cols = [c for c in ["5営業日騰落率(%)", "20営業日騰落率(%)"] if c in csv_export.columns]
+            mcap_cols = ["発表日時価総額(億円)"] if add_market_cap and "発表日時価総額(億円)" in csv_export.columns else []
+            csv_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display + ret_cols + mcap_cols
             csv_export = csv_export[[c for c in csv_cols if c in csv_export.columns]]
             # BOM付きUTF-8でバイト列として生成
             csv_bytes = csv_export.to_csv(index=False).encode("utf-8-sig")
@@ -496,7 +737,11 @@ def main():
                 lambda x: f"{x[:4]}/{x[4:6]}/{x[6:]}" if len(str(x)) == 8 else x
             )
 
-            table_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display
+            ret_cols = []
+            if add_price_returns:
+                ret_cols = [c for c in ["5営業日騰落率(%)", "20営業日騰落率(%)"] if c in display_df.columns]
+            mcap_cols = ["発表日時価総額(億円)"] if add_market_cap and "発表日時価総額(億円)" in display_df.columns else []
+            table_cols = ["日付", "コード", "企業名", "分類", "PDF"] + keywords_display + ret_cols + mcap_cols
             table_df = display_df[[c for c in table_cols if c in display_df.columns]]
 
             st.dataframe(
