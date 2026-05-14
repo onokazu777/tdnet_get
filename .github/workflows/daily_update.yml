@@ -6,7 +6,12 @@ on:
     - cron: '5 8 * * 1-5'
     - cron: '5 11 * * 1-5'
     - cron: '55 14 * * 1-5'
-  workflow_dispatch:  # 手動実行ボタン
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: '対象日付（空欄=今日, YYYYMMDD=指定日, "YYYYMMDD YYYYMMDD"=範囲）'
+        required: false
+        default: ''
 
 jobs:
   update:
@@ -27,8 +32,14 @@ jobs:
         run: pip install requests pandas beautifulsoup4 lxml openpyxl yfinance pymupdf
 
       # ── 3. 今日の日付（JST） ──
-      - name: Set today's date
-        run: echo "TODAY=$(date +%Y%m%d)" >> $GITHUB_ENV
+      - name: Set target date
+        run: |
+          INPUT="${{ github.event.inputs.target_date }}"
+          if [ -z "$INPUT" ]; then
+            echo "TODAY=$(date +%Y%m%d)" >> $GITHUB_ENV
+          else
+            echo "TODAY=$INPUT" >> $GITHUB_ENV
+          fi
 
       # ── 4a. ① TDnet PDFダウンロード ──
       - name: Run PDF downloader
