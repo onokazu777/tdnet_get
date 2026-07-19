@@ -71,6 +71,38 @@ jobs:
             --no-stop-on-empty-meta
         continue-on-error: true
 
+      # ── 4c2. PDF + CSV を個人 Google Drive へアップロード（PC不要）──
+      # Secret RCLONE_CONFIG が無い場合はスキップ（公開ビューア更新は続行）
+      - name: Upload PDF/CSV to Google Drive
+        env:
+          RCLONE_CONFIG_BODY: ${{ secrets.RCLONE_CONFIG }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RCLONE_CONFIG_BODY:-}" ]; then
+            echo "RCLONE_CONFIG secret 未設定のため Drive アップロードをスキップします"
+            echo "PCで setup_rclone_gdrive.ps1 を実行し、Secret を登録してください"
+            exit 0
+          fi
+
+          curl -fsSL https://rclone.org/install.sh | sudo bash
+          mkdir -p ~/.config/rclone
+          printf '%s\n' "$RCLONE_CONFIG_BODY" > ~/.config/rclone/rclone.conf
+
+          # setup_rclone_gdrive.ps1 で作る remote 名は gdrive
+          # 保存先: マイドライブ/TDnet_Downloads （ローカルの G:\マイドライブ\TDnet_Downloads と同じ）
+          REMOTE="gdrive:TDnet_Downloads"
+
+          echo "Uploading pdf_tmp → $REMOTE"
+          rclone copy ./pdf_tmp "$REMOTE" \
+            --create-empty-src-dirs \
+            --transfers 8 \
+            --checkers 8 \
+            --fast-list \
+            -v
+
+          echo "Upload done. Listing remote (top-level):"
+          rclone lsd "$REMOTE" | tail -n 20 || true
+
       # ── 4e. ⑥ PDFテキスト抽出 → JSON保存 ──
       - name: Extract PDF text to JSON
         run: |
