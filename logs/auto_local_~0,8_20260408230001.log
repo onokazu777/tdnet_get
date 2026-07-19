@@ -1,0 +1,46 @@
+Traceback (most recent call last):
+  File "C:\Users\onok\Desktop\開発\tdnet_get\①_tdnetアクセスしてダウンロードする処理（月日付別フォルダ保存）.py", line 452, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\①_tdnetアクセスしてダウンロードする処理（月日付別フォルダ保存）.py", line 265, in main
+    d_from, d_to, label, mode = parse_target_spec(target_spec)
+                                ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\①_tdnetアクセスしてダウンロードする処理（月日付別フォルダ保存）.py", line 133, in parse_target_spec
+    raise ValueError("TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。")
+ValueError: TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。
+Traceback (most recent call last):
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 599, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 584, in main
+    run_analyze(root_dir=root_dir, target_spec=args.target, keywords=args.keywords)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 333, in run_analyze
+    targets, label, (d_from, d_to), mode = select_target_folders(root_dir, target_spec)
+                                           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 94, in select_target_folders
+    d_from, d_to, label, mode = parse_target_spec(target_spec)
+                                ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 73, in parse_target_spec
+    raise ValueError("TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。")
+ValueError: TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。
+Traceback (most recent call last):
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 599, in <module>
+    main()
+    ~~~~^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 586, in main
+    run_distribute(
+    ~~~~~~~~~~~~~~^
+        root_dir=root_dir,
+        ^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        use_local_link=getattr(args, "local_link", False),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 438, in run_distribute
+    _, _, label, _ = parse_target_spec(target_spec)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\onok\Desktop\開発\tdnet_get\②a②bは２つフリーワード検索.py", line 73, in parse_target_spec
+    raise ValueError("TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。")
+ValueError: TARGET_SPEC は 'YYYYMMDD' / 'YYYYMM' / 'YYYYMMDD YYYYMMDD' のいずれかです。

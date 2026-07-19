@@ -405,27 +405,29 @@ def main():
             if args.page_sleep > 0:
                 time.sleep(args.page_sleep)
 
-        # 日別CSV保存
+        # 日別CSV保存（データが0件でもヘッダ付きで作成する）
+        out_csv = f"TDnet_Sorted_{target_date_str}.csv"
+        out_path = day_dir / out_csv
+        out_path_root = save_root / out_csv
+
         if data_list:
             df = pd.DataFrame(data_list)
 
             # 優先度（小さいほど優先）→ 時刻（新しい順）で並べる
             df_sorted = df.sort_values(by=["優先度", "時刻"], ascending=[True, False])
             df_final = df_sorted[["分類", "時刻", "コード", "会社名", "表題（リンク）", "URL（生）", "PDFファイル名"]]
+        else:
+            df_final = pd.DataFrame(
+                columns=["分類", "時刻", "コード", "会社名", "表題（リンク）", "URL（生）", "PDFファイル名"]
+            )
 
-            out_csv = f"TDnet_Sorted_{target_date_str}.csv"
-
-            # ① 日付別フォルダに保存
-            out_path = day_dir / out_csv
-            df_final.to_csv(out_path, index=False, encoding="utf-8-sig")
+        df_final.to_csv(out_path, index=False, encoding="utf-8-sig")
+        df_final.to_csv(out_path_root, index=False, encoding="utf-8-sig")
+        if data_list:
             print(f"   📝 一覧CSV保存: {out_csv}")
-
-            # ② ルートフォルダにもコピー保存（②Bで参照できるように）
-            out_path_root = save_root / out_csv
-            df_final.to_csv(out_path_root, index=False, encoding="utf-8-sig")
             print(f"   📝 一覧CSV保存（ルート）: {out_csv}")
         else:
-            print("   📝 一覧CSV: （作成なし）")
+            print(f"   📝 一覧CSV保存（0件）: {out_csv}")
 
         # 日別統計
         print(f"   📊 日別統計: page_access={day_page_access}, pdf_success={day_pdf_success}, excluded={day_excluded}")

@@ -1,0 +1,25 @@
+﻿[2026-04-07 23:10:56] CHECK last= range=20260406..20260407
+[2026-04-07 23:10:56] RUN 20260406 (missing outputs)
+[2026-04-07 23:12:13] CHECK last= range=20260406..20260407
+[2026-04-07 23:12:13] RUN 20260406 (missing outputs)
+[2026-04-07 23:12:13] WARN 20260406 still missing outputs after run
+[2026-04-07 23:12:13] RUN 20260407 (missing outputs)
+[2026-04-07 23:12:28] WARN 20260407 still missing outputs after run
+[2026-04-07 23:12:49] CHECK last= range=20260406..20260407
+[2026-04-07 23:12:49] RUN 20260406 (missing outputs)
+[2026-04-07 23:12:49] WARN 20260406 still missing outputs after run
+[2026-04-07 23:12:49] RUN 20260407 (missing outputs)
+[2026-04-07 23:13:04] WARN 20260407 still missing outputs after run
+[2026-04-07 23:13:28] CHECK last= range=20260406..20260407
+[2026-04-07 23:13:28] RUN 20260406 (missing outputs)
+[2026-04-07 23:13:28] WARN 20260406 still missing outputs after run
+[2026-04-07 23:13:28] RUN 20260407 (missing outputs)
+[2026-04-07 23:13:43] WARN 20260407 still missing outputs after run
+[2026-04-07 23:13:54] WARN 20260406 still missing outputs after run
+[2026-04-07 23:13:54] RUN 20260407 (missing outputs)
+[2026-04-07 23:14:09] WARN 20260407 still missing outputs after run
+[2026-07-19 17:07:42] CHECK last= range=20260718..20260719
+[2026-07-19 17:07:42] RUN 20260718 (missing outputs)
+[2026-07-19 17:07:48] WARN 20260718 still missing outputs after run
+[2026-07-19 17:07:48] RUN 20260719 (missing outputs)
+[2026-07-19 17:07:54] WARN 20260719 still missing outputs after run

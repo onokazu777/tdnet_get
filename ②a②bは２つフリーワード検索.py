@@ -401,16 +401,15 @@ def run_analyze(root_dir: str, target_spec: str, keywords):
     out_csv = f"{ANALYSIS_CSV_PREFIX}_{label}.csv"
     out_path = os.path.join(root_dir, out_csv)
 
-    if not results:
-        print("ヒットするPDFはありませんでした。")
-        return
-
     df = pd.DataFrame(results)
 
     # ヒット列数（キーワード列のうち値があるものの数）でソート用の列を一時追加
-    df["_hit_kw_count"] = df[keywords].apply(lambda r: sum(1 for v in r if v), axis=1)
-    df_sorted = df.sort_values(by=["日付", "_hit_kw_count", "PDFファイル名"], ascending=[False, False, True])
-    df_sorted = df_sorted.drop(columns=["_hit_kw_count"])
+    if df.empty:
+        df_sorted = df
+    else:
+        df["_hit_kw_count"] = df[keywords].apply(lambda r: sum(1 for v in r if v), axis=1)
+        df_sorted = df.sort_values(by=["日付", "_hit_kw_count", "PDFファイル名"], ascending=[False, False, True])
+        df_sorted = df_sorted.drop(columns=["_hit_kw_count"])
 
     # 検索に使用したキーワード一覧（全行同じ値）を列として追加
     if keywords:
@@ -419,7 +418,10 @@ def run_analyze(root_dir: str, target_spec: str, keywords):
         keywords_summary = ""
 
     cols = ["日付", "コード", "PDFファイル名"] + list(keywords)
-    df_sorted = df_sorted[cols]
+    if df_sorted.empty:
+        df_sorted = pd.DataFrame(columns=cols)
+    else:
+        df_sorted = df_sorted[cols]
     df_sorted["検索キーワード一覧"] = keywords_summary
 
     archive_if_exists(out_path)
@@ -513,6 +515,7 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
     out_path = os.path.join(root_dir, out_csv)
 
     archive_if_exists(out_path)
+    # 0件でもヘッダ付きCSVを出す（Excelで扱いやすくする）
     out_df = pd.DataFrame(results)
 
     # カラム順: 識別列 → 分類 → 表題リンク → キーワード列 → URL
@@ -526,8 +529,11 @@ def run_distribute(root_dir: str, target_spec: str, stop_on_empty_meta: bool = T
     ] + keyword_cols + [
         "URL（生）",
     ]
-    final_cols = [c for c in cols_order if c in out_df.columns]
-    out_df = out_df[final_cols]
+    if out_df.empty:
+        out_df = pd.DataFrame(columns=cols_order)
+    else:
+        final_cols = [c for c in cols_order if c in out_df.columns]
+        out_df = out_df[final_cols]
     out_df.to_csv(out_path, index=False, encoding="utf-8-sig")
 
     print("\n✅ ②B 完了（配布用CSV作成・キーワード別ページ列）")

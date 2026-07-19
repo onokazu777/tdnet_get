@@ -1,0 +1,11 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xbrl-taxonomy"
+version = "0.1.0"
+description = "TDnet XBRL taxonomy definitions - shared label maps and element mappings"
+
+[tool.setuptools]
+py-modules = ["xbrl_taxonomy"]
