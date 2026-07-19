@@ -74,6 +74,7 @@ jobs:
       # ── 4c2. PDF + CSV を個人 Google Drive へアップロード（PC不要）──
       # Secret RCLONE_CONFIG が無い場合はスキップ（公開ビューア更新は続行）
       - name: Upload PDF/CSV to Google Drive
+        continue-on-error: true
         env:
           RCLONE_CONFIG_BODY: ${{ secrets.RCLONE_CONFIG }}
         run: |
