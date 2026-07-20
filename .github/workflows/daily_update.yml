@@ -2,12 +2,9 @@ name: Daily XBRL Update
 
 on:
   schedule:
-    # JST 11:35, 15:35, 17:05, 20:05, 23:55 (UTC 02:35, 06:35, 08:05, 11:05, 14:55) ※平日のみ
-    - cron: '35 2 * * 1-5'
-    - cron: '35 6 * * 1-5'
-    - cron: '5 8 * * 1-5'
-    - cron: '5 11 * * 1-5'
-    - cron: '55 14 * * 1-5'
+    # 単発cronは数時間遅延することがあるため、平日は短間隔起動し枠内だけ本番実行する。
+    # UTC 02:00-15:59 = JST 11:00-00:59（月-金）
+    - cron: '*/5 2-15 * * 1-5'
   workflow_dispatch:
     inputs:
       target_date:
@@ -16,10 +13,124 @@ on:
         default: ''
 
 jobs:
-  update:
+  # いま実行すべき枠か判定（GitHub schedule遅延対策）
+  gate:
+    name: Decide slot
     runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.final.outputs.should_run }}
+      slot: ${{ steps.final.outputs.slot }}
+      send_mail: ${{ steps.final.outputs.send_mail }}
+      today: ${{ steps.final.outputs.today }}
+    steps:
+      - name: Decide whether to run
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_DATE_INPUT: ${{ github.event.inputs.target_date }}
+        run: |
+          python3 <<'PY'
+          import os
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+
+          # 枠: 開始時刻(JST)から次枠直前までキャッチアップ可。メールは1135/1535のみ。
+          # (slot_id, start_h, start_m, send_mail)
+          SLOT_STARTS = [
+              ("1135", 11, 35, True),
+              ("1535", 15, 35, True),
+              ("1705", 17, 5, False),
+              ("2005", 20, 5, False),
+              ("2355", 23, 55, False),
+          ]
+
+          now = datetime.now(ZoneInfo("Asia/Tokyo"))
+          event = os.environ.get("EVENT_NAME", "")
+
+          def emit(should_run, slot, send_mail, today):
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+                  f.write(f"should_run={should_run}\n")
+                  f.write(f"slot={slot}\n")
+                  f.write(f"send_mail={str(send_mail).lower()}\n")
+                  f.write(f"today={today}\n")
+              print(f"decide: should_run={should_run} slot={slot} send_mail={send_mail} now={now:%Y-%m-%d %H:%M JST}")
+
+          if event == "workflow_dispatch":
+              today = (os.environ.get("TARGET_DATE_INPUT") or "").strip() or now.strftime("%Y%m%d")
+              # 手動は常に実行。メールも送る（確認用）
+              emit("true", "manual", True, today.split()[0] if today else now.strftime("%Y%m%d"))
+              raise SystemExit(0)
+
+          # schedule: 直近の開始済み枠を1つ選ぶ（次枠開始前まで有効）
+          minutes = now.hour * 60 + now.minute
+          chosen = None
+          for i, (slot, h, m, mail) in enumerate(SLOT_STARTS):
+              start = h * 60 + m
+              if i + 1 < len(SLOT_STARTS):
+                  nh, nm, _ = SLOT_STARTS[i + 1][1], SLOT_STARTS[i + 1][2], SLOT_STARTS[i + 1][3]
+                  end = nh * 60 + nm
+              else:
+                  # 23:55枠は翌日01:00まで（深夜遅延の救済）
+                  end = 24 * 60 + 60
+              # 翌日01:00前の早朝は、前日2355の継続とみなす
+              adj_minutes = minutes
+              day = now.strftime("%Y%m%d")
+              if slot == "2355" and minutes < 60:
+                  adj_minutes = minutes + 24 * 60
+                  day = (now - timedelta(days=1)).strftime("%Y%m%d")
+              if start <= adj_minutes < end:
+                  chosen = (slot, mail, day)
+                  break
+
+          if not chosen:
+              emit("false", "none", False, now.strftime("%Y%m%d"))
+              raise SystemExit(0)
+
+          slot, mail, day = chosen
+          emit("true", slot, mail, day)
+          PY
+
+      - name: Check if this slot already ran today
+        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual'
+        id: dedup
+        uses: actions/cache@v4
+        with:
+          path: .tdnet-slot-marker
+          key: tdnet-slot-${{ steps.decide.outputs.today }}-${{ steps.decide.outputs.slot }}
+
+      - name: Skip if slot already completed
+        id: skip
+        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual' && steps.dedup.outputs.cache-hit == 'true'
+        run: |
+          echo "Slot ${{ steps.decide.outputs.slot }} already completed for ${{ steps.decide.outputs.today }} — skip"
+          echo "should_run=false" >> "$GITHUB_OUTPUT"
+
+      - name: Final should_run
+        id: final
+        run: |
+          if [ "${{ steps.decide.outputs.should_run }}" != "true" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.skip.outputs.should_run }}" = "false" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "slot=${{ steps.decide.outputs.slot }}" >> "$GITHUB_OUTPUT"
+          echo "send_mail=${{ steps.decide.outputs.send_mail }}" >> "$GITHUB_OUTPUT"
+          echo "today=${{ steps.decide.outputs.today }}" >> "$GITHUB_OUTPUT"
+
+  update:
+    name: Update
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: tdnet-${{ needs.gate.outputs.today }}-${{ needs.gate.outputs.slot }}
+      cancel-in-progress: false
     env:
       TZ: Asia/Tokyo
+      RUN_SLOT: ${{ needs.gate.outputs.slot }}
+      RUN_TODAY: ${{ needs.gate.outputs.today }}
 
     steps:
       # ── 1. スクリプトを取得（このリポジトリ = tdnet_get） ──
@@ -38,10 +149,11 @@ jobs:
         run: |
           INPUT="${{ github.event.inputs.target_date }}"
           if [ -z "$INPUT" ]; then
-            echo "TODAY=$(date +%Y%m%d)" >> $GITHUB_ENV
+            echo "TODAY=${{ needs.gate.outputs.today }}" >> $GITHUB_ENV
           else
             echo "TODAY=$INPUT" >> $GITHUB_ENV
           fi
+          echo "Running slot=${{ needs.gate.outputs.slot }} send_mail=${{ needs.gate.outputs.send_mail }}"
 
       # ── 4a. ① TDnet PDFダウンロード ──
       - name: Run PDF downloader
@@ -241,16 +353,31 @@ jobs:
             echo "Pushed new data for $TODAY"
           fi
 
+      # 同一枠の再実行を防ぐマーカーを保存
+      - name: Mark slot completed
+        if: success() && needs.gate.outputs.slot != 'manual'
+        run: |
+          mkdir -p .tdnet-slot-marker
+          echo "slot=${{ needs.gate.outputs.slot }}" > .tdnet-slot-marker/done.txt
+          echo "finished=$(date -Is)" >> .tdnet-slot-marker/done.txt
+
+      - name: Save slot marker
+        if: success() && needs.gate.outputs.slot != 'manual'
+        uses: actions/cache/save@v4
+        with:
+          path: .tdnet-slot-marker
+          key: tdnet-slot-${{ needs.gate.outputs.today }}-${{ needs.gate.outputs.slot }}
+
   # 11:35 / 15:35（および手動実行）のときだけ完了メールを送る
   notify:
     name: Notify by email
-    needs: update
+    needs: [gate, update]
     if: >
-      always() && !cancelled() && (
-        github.event_name == 'workflow_dispatch' ||
-        github.event.schedule == '35 2 * * 1-5' ||
-        github.event.schedule == '35 6 * * 1-5'
-      )
+      always() &&
+      !cancelled() &&
+      needs.gate.outputs.should_run == 'true' &&
+      needs.gate.outputs.send_mail == 'true' &&
+      needs.update.result != 'skipped'
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Tokyo

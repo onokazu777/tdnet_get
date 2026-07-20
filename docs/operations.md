@@ -4,13 +4,35 @@
 
 日次処理はGitHub Actionsで自動実行されます。PCを起動する必要はありません。
 
-- 平日11:35 JST
-- 平日15:35 JST（15:30前後の大量開示向け）
-- 平日17:05 JST
-- 平日20:05 JST
-- 平日23:55 JST
+狙いの開始時刻（JST）:
 
-完了メールは **11:35** と **15:35**（および手動実行）の後だけ送ります。
+- 平日11:35
+- 平日15:35（15:30前後の大量開示向け）
+- 平日17:05
+- 平日20:05
+- 平日23:55
+
+実装上は、GitHubの単発cron遅延を避けるため **平日5分おきに起動し、上記枠の時間帯だけ本番処理**します。同じ枠は1日1回です。完了メールは **11:35** と **15:35**（および手動実行）の後だけ送ります。
+
+## 時刻どおり起動したい場合
+
+GitHubの`schedule`は混雑時に遅延します。数分〜十数分なら枠判定で吸収できますが、厳密な時刻が必要なら外部cronから`workflow_dispatch`を叩きます。
+
+例: [cron-job.org](https://cron-job.org/) など
+
+1. GitHubで Fine-grained PAT または classic PAT を発行（`actions: write`、対象リポジトリ `tdnet_get`）
+2. 外部cronで、11:35 / 15:35 / 17:05 / 20:05 / 23:55 JST に HTTP POST
+
+```text
+POST https://api.github.com/repos/onokazu777/tdnet_get/actions/workflows/daily_update.yml/dispatches
+Authorization: Bearer <PAT>
+Accept: application/vnd.github+json
+Content-Type: application/json
+
+{"ref":"main","inputs":{"target_date":""}}
+```
+
+3. 同じ枠が二重起動しても、枠マーカーで2回目はスキップされます
 
 確認先:
 
