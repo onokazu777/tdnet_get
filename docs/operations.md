@@ -200,6 +200,40 @@ http://localhost:8501
 
 停止は、起動したPython/Streamlitプロセスを終了します。
 
+## 完了メール設定
+
+`Daily XBRL Update`の各実行（15:35 / 17:05 / 20:05 / 23:55、および手動実行）が終わると、成功・失敗どちらでも `ono@links-research.com` へメールを送ります。
+
+目的は「更新しました。チェックしてください」の案内です。本文には結果、対象日、ActionsのRun URL、Viewer URLを含めます。
+
+### 必要なSecrets
+
+https://github.com/onokazu777/tdnet_get/settings/secrets/actions
+
+| 名前 | 内容 |
+|---|---|
+| `MAIL_SMTP_SERVER` | SMTPサーバ（Google Workspaceなら `smtp.gmail.com`） |
+| `MAIL_SMTP_PORT` | `465` または `587` |
+| `MAIL_USERNAME` | SMTP認証ユーザー（通常は送信元メールアドレス） |
+| `MAIL_PASSWORD` | SMTPパスワード（Googleならアプリパスワード） |
+
+未設定の場合、更新ジョブは通常どおり実行され、メール送信だけスキップされます。
+
+### Google Workspace / Gmail の例
+
+1. Googleアカウントで2段階認証を有効にする
+2. [アプリパスワード](https://myaccount.google.com/apppasswords)を発行する
+3. Secretsへ次を登録する
+
+```text
+MAIL_SMTP_SERVER = smtp.gmail.com
+MAIL_SMTP_PORT   = 465
+MAIL_USERNAME    = 送信に使うメールアドレス
+MAIL_PASSWORD    = 発行したアプリパスワード
+```
+
+4. Actionsで`Daily XBRL Update`を手動実行し、メール受信を確認する
+
 ## 認証情報の管理
 
 値を次の場所へ貼らないでください。
@@ -215,6 +249,7 @@ http://localhost:8501
 |---|---|
 | Google Drive rclone設定 | GitHub Secret `RCLONE_CONFIG` |
 | viewer push用PAT | GitHub Secret `VIEWER_PAT` |
+| 完了メールSMTP | GitHub Secret `MAIL_SMTP_*` |
 | ④管理者パスワード | Streamlit secrets `admin_password` |
 
 認証情報を誤って公開した場合は、文字列を削除するだけでなく、GoogleまたはGitHub側で権限・トークンを失効させて再発行します。

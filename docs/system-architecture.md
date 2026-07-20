@@ -145,6 +145,10 @@ Windowsタスクスケジューラ
 |---|---|
 | `VIEWER_PAT` | `tdnet-viewer`のclone・push |
 | `RCLONE_CONFIG` | 個人Google Driveへのrclone認証 |
+| `MAIL_SMTP_SERVER` | 完了メールのSMTPサーバ |
+| `MAIL_SMTP_PORT` | 完了メールのSMTPポート |
+| `MAIL_USERNAME` | 完了メールのSMTPユーザー |
+| `MAIL_PASSWORD` | 完了メールのSMTPパスワード |
 | `GITHUB_TOKEN` | keepaliveの空コミット（GitHubが自動発行） |
 
 ### 環境変数

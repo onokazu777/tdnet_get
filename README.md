@@ -150,11 +150,27 @@ pip install -r requirements.txt
 - Viewer（https://onokazu777.github.io/tdnet-viewer/）を更新したい場合は、ローカルではなくActionsの`Daily XBRL Update`を使います
 - 詳細は[運用・障害対応](docs/operations.md)も参照してください
 
+## 完了メール
+
+各回の`Daily XBRL Update`が終わると、成功・失敗どちらでも `ono@links-research.com` へメールを送ります。件名は「更新しました。チェックしてください」系です。
+
+送信には次のRepository secretsが必要です（未設定なら更新処理自体は動き、メールだけスキップします）。
+
+| Secret | 例 |
+|---|---|
+| `MAIL_SMTP_SERVER` | `smtp.gmail.com`（Google Workspaceの場合） |
+| `MAIL_SMTP_PORT` | `465`（SSL）または `587`（STARTTLS） |
+| `MAIL_USERNAME` | 送信に使うメールアドレス |
+| `MAIL_PASSWORD` | アプリパスワード（通常のログインパスワードではない） |
+
+設定手順の詳細は[運用・障害対応](docs/operations.md#完了メール設定)を参照してください。
+
 ## 機密情報
 
 以下はGitHub ActionsのRepository secretsで管理し、READMEやコードへ値を書かないでください。
 
 - `VIEWER_PAT`: `tdnet-viewer`へpushするためのGitHubトークン
 - `RCLONE_CONFIG`: 個人Google Driveへ接続するrclone設定
+- `MAIL_SMTP_SERVER` / `MAIL_SMTP_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD`: 完了メール送信用
 
 Streamlitの管理者パスワードを使う場合は、Streamlit secretsの`admin_password`で管理します。

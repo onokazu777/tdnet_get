@@ -239,3 +239,90 @@ jobs:
             git push
             echo "Pushed new data for $TODAY"
           fi
+
+  # 成功・失敗どちらでも完了メールを送る（Secrets未設定ならスキップ）
+  notify:
+    name: Notify by email
+    needs: update
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Tokyo
+      MAIL_SMTP_SERVER: ${{ secrets.MAIL_SMTP_SERVER }}
+      MAIL_SMTP_PORT: ${{ secrets.MAIL_SMTP_PORT }}
+      MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+      MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+    steps:
+      - name: Prepare email contents
+        id: mail
+        env:
+          UPDATE_RESULT: ${{ needs.update.result }}
+        run: |
+          if [ -z "${MAIL_PASSWORD:-}" ] || [ -z "${MAIL_SMTP_SERVER:-}" ] || [ -z "${MAIL_USERNAME:-}" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "MAIL_* secrets が未設定のため、完了メールをスキップします"
+            echo "Repository secrets: MAIL_SMTP_SERVER / MAIL_SMTP_PORT / MAIL_USERNAME / MAIL_PASSWORD"
+            exit 0
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+          NOW="$(date '+%Y-%m-%d %H:%M JST')"
+          TARGET="${{ github.event.inputs.target_date }}"
+          if [ -z "$TARGET" ]; then
+            TARGET="$(date '+%Y%m%d')（今日）"
+          fi
+
+          if [ "$UPDATE_RESULT" = "success" ]; then
+            STATUS_JP="成功"
+            SUBJECT="【tdnet】更新しました。チェックしてください（${NOW}）"
+            INTRO="日次更新が完了しました。内容を確認してください。"
+          else
+            STATUS_JP="失敗"
+            SUBJECT="【tdnet】更新に失敗しました。チェックしてください（${NOW}）"
+            INTRO="日次更新が失敗しました。Actionsログを確認してください。"
+          fi
+
+          {
+            echo "${INTRO}"
+            echo ""
+            echo "結果: ${STATUS_JP}"
+            echo "対象: ${TARGET}"
+            echo "完了時刻: ${NOW}"
+            echo "実行: ${{ github.event_name }}"
+            echo "ワークフロー: ${{ github.workflow }}"
+            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "Viewer: https://onokazu777.github.io/tdnet-viewer/"
+            echo "Drive: Google Drive の TDnet_Downloads"
+          } > mail_body.txt
+
+          {
+            echo "subject<<EOF"
+            echo "$SUBJECT"
+            echo "EOF"
+            echo "body<<EOF"
+            cat mail_body.txt
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          PORT="${MAIL_SMTP_PORT:-465}"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
+          if [ "$PORT" = "465" ]; then
+            echo "secure=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "secure=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send completion email
+        if: steps.mail.outputs.configured == 'true'
+        uses: dawidd6/action-send-mail@v4
+        with:
+          server_address: ${{ env.MAIL_SMTP_SERVER }}
+          server_port: ${{ steps.mail.outputs.port }}
+          secure: ${{ steps.mail.outputs.secure }}
+          username: ${{ env.MAIL_USERNAME }}
+          password: ${{ env.MAIL_PASSWORD }}
+          subject: ${{ steps.mail.outputs.subject }}
+          to: ono@links-research.com
+          from: TDnet Update <${{ env.MAIL_USERNAME }}>
+          body: ${{ steps.mail.outputs.body }}
+          convert_markdown: false
