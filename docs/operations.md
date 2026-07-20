@@ -4,6 +4,7 @@
 
 日次処理はGitHub Actionsで自動実行されます。PCを起動する必要はありません。
 
+- 平日15:35 JST（15:30前後の大量開示向け）
 - 平日17:05 JST
 - 平日20:05 JST
 - 平日23:55 JST
@@ -172,6 +173,16 @@ powershell.exe -ExecutionPolicy Bypass -File ".\remove_tdnet_daily_task.ps1"
 ```
 
 予備として残す場合は、無効のまま保持できます。
+
+### 他のPCでローカル取得する
+
+Google Drive for Desktopで同じ`TDnet_Downloads`を同期しているPCなら、別PCでも`auto_local.bat` / `run_auto_local.py`を実行できます。
+
+- 保存先の既定値は`G:\マイドライブ\TDnet_Downloads`
+- ドライブ文字が違う場合は`run_auto_local.py`の`SAVE_ROOT`を合わせる
+- ローカル実行はPDF・CSVをDriveへ保存するだけで、`tdnet-viewer`は更新しない
+
+セットアップと起動手順は[READMEの「他のPCでローカル取得する」](../README.md#他のpcでローカル取得する)を参照してください。
 
 ### ローカルStreamlit
 

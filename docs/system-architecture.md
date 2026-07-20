@@ -47,7 +47,7 @@ flowchart TB
 
 - リポジトリ: `onokazu777/tdnet_get`
 - ワークフロー: `.github/workflows/daily_update.yml`
-- 定期実行: 平日17:05、20:05、23:55（JST）
+- 定期実行: 平日15:35、17:05、20:05、23:55（JST）
 - 手動実行: Actions画面の`Run workflow`
 
 ### 2. GitHub Actions

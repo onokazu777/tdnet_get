@@ -31,7 +31,16 @@ flowchart LR
     VR --> ST[Streamlitクラウド検索用データ]
 ```
 
-平日の17:05、20:05、23:55（JST）にGitHub Actionsが起動します。手動実行では、単日・月・日付範囲を指定できます。
+平日にGitHub Actionsが次の時刻で起動します（JST）。
+
+| 回 | 時刻 | 目的 |
+|---|---|---|
+| 1回目 | 15:35 | 15:30前後の大量開示を取り込む |
+| 2回目 | 17:05 | 午後の追加開示を取り込む |
+| 3回目 | 20:05 | 夕方の追加開示を取り込む |
+| 4回目 | 23:55 | 当日分の取りこぼしを取り込む |
+
+手動実行では、単日・月・日付範囲を指定できます。
 
 ## 主な構成
 
@@ -71,6 +80,75 @@ XBRL Viewer:
 $env:XBRL_DATA_ROOT = "$HOME\Desktop\XBRL_Data"
 python -m streamlit run "④_xbrl_viewer.py"
 ```
+
+## 他のPCでローカル取得する
+
+本番の取得・Drive保存・公開はGitHub Actionsが行うため、通常は不要です。ただし、Google Drive for Desktopで同じ`TDnet_Downloads`が見えるPCなら、別PCでもローカル取得できます。
+
+ローカル実行で行うこと:
+
+- ① PDF・一覧CSVの取得
+- ② キーワード検索と配布CSV作成
+- 保存先: Google Driveの`TDnet_Downloads`
+
+ローカル実行で行わないこと:
+
+- XBRL解析
+- `tdnet-viewer` / GitHub Pages の更新
+
+### 前提
+
+1. 対象PCに [Google Drive for Desktop](https://www.google.com/drive/download/) を入れ、同じGoogleアカウントで同期する
+2. 保存先パスが次の場所になること（`run_auto_local.py`の既定値）
+
+```text
+G:\マイドライブ\TDnet_Downloads
+```
+
+ドライブ文字が`G:`でない場合は、エクスプローラーで実際のパスを確認し、`run_auto_local.py`の`SAVE_ROOT`をそのPC用に合わせる
+
+3. Python 3.11前後を入れる
+4. このリポジトリを取得する（Git clone、またはZIP展開）
+
+### 手順
+
+PowerShell例:
+
+```powershell
+git clone https://github.com/onokazu777/tdnet_get.git
+cd tdnet_get
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+当日分を取得:
+
+```powershell
+.\auto_local.bat
+```
+
+日付指定:
+
+```powershell
+.\auto_local.bat 20260720
+```
+
+仮想環境のPythonを使う場合:
+
+```powershell
+.\.venv\Scripts\python.exe -u run_auto_local.py
+.\.venv\Scripts\python.exe -u run_auto_local.py 20260720
+```
+
+ログは`logs\auto_local_<日付>_<実行時刻>.log`に出力されます。
+
+### 注意
+
+- Actionsと同時刻に動かすと、同じ日のPDF取得が重複します。緊急時や補完時だけ使う想定です
+- Viewer（https://onokazu777.github.io/tdnet-viewer/）を更新したい場合は、ローカルではなくActionsの`Daily XBRL Update`を使います
+- 詳細は[運用・障害対応](docs/operations.md)も参照してください
 
 ## 機密情報
 
