@@ -212,27 +212,31 @@ https://github.com/onokazu777/tdnet_get/settings/secrets/actions
 
 | 名前 | 内容 |
 |---|---|
-| `MAIL_SMTP_SERVER` | SMTPサーバ（Google Workspaceなら `smtp.gmail.com`） |
-| `MAIL_SMTP_PORT` | `465` または `587` |
-| `MAIL_USERNAME` | SMTP認証ユーザー（通常は送信元メールアドレス） |
-| `MAIL_PASSWORD` | SMTPパスワード（Googleならアプリパスワード） |
+| `MAIL_SMTP_SERVER` | SMTPサーバ（Googleなら `smtp.gmail.com`） |
+| `MAIL_SMTP_PORT` | `587`（推奨）または `465` |
+| `MAIL_USERNAME` | SMTP認証ユーザー（送信元。例: `ono.happy@gmail.com`） |
+| `MAIL_PASSWORD` | SMTPパスワード（Googleならアプリパスワード。スペースなし） |
 
 未設定の場合、更新ジョブは通常どおり実行され、メール送信だけスキップされます。
 
 ### Google Workspace / Gmail の例
 
-1. Googleアカウントで2段階認証を有効にする
-2. [アプリパスワード](https://myaccount.google.com/apppasswords)を発行する
-3. Secretsへ次を登録する
+1. **送信元**にするGoogleアカウント（例: `ono.happy@gmail.com`）でログインする
+2. 2段階認証を有効にする
+3. [アプリパスワード](https://myaccount.google.com/apppasswords)を発行する
+4. Secretsへ次を登録する
 
 ```text
 MAIL_SMTP_SERVER = smtp.gmail.com
-MAIL_SMTP_PORT   = 465
-MAIL_USERNAME    = 送信に使うメールアドレス
-MAIL_PASSWORD    = 発行したアプリパスワード
+MAIL_SMTP_PORT   = 587
+MAIL_USERNAME    = ono.happy@gmail.com
+MAIL_PASSWORD    = 発行した16桁（スペース削除）
 ```
 
-4. Actionsで`Daily XBRL Update`を手動実行し、メール受信を確認する
+5. 宛先 `ono@links-research.com` はワークフロー側に固定済み
+6. Actionsで`Daily XBRL Update`を手動実行し、メール受信を確認する
+
+`535 BadCredentials` が出る場合は、通常のログインパスワードを入れていないか、送信元と違うアカウントのアプリパスワードになっていないかを確認してください。
 
 ## 認証情報の管理
 

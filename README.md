@@ -159,7 +159,7 @@ pip install -r requirements.txt
 | Secret | 例 |
 |---|---|
 | `MAIL_SMTP_SERVER` | `smtp.gmail.com`（Google Workspaceの場合） |
-| `MAIL_SMTP_PORT` | `465`（SSL）または `587`（STARTTLS） |
+| `MAIL_SMTP_PORT` | `587`（推奨）または `465` |
 | `MAIL_USERNAME` | 送信に使うメールアドレス |
 | `MAIL_PASSWORD` | アプリパスワード（通常のログインパスワードではない） |
 

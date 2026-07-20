@@ -252,77 +252,97 @@ jobs:
       MAIL_SMTP_PORT: ${{ secrets.MAIL_SMTP_PORT }}
       MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
       MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+      UPDATE_RESULT: ${{ needs.update.result }}
+      TARGET_DATE_INPUT: ${{ github.event.inputs.target_date }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WORKFLOW_NAME: ${{ github.workflow }}
+      EVENT_NAME: ${{ github.event_name }}
     steps:
-      - name: Prepare email contents
-        id: mail
-        env:
-          UPDATE_RESULT: ${{ needs.update.result }}
-        run: |
-          if [ -z "${MAIL_PASSWORD:-}" ] || [ -z "${MAIL_SMTP_SERVER:-}" ] || [ -z "${MAIL_USERNAME:-}" ]; then
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "MAIL_* secrets が未設定のため、完了メールをスキップします"
-            echo "Repository secrets: MAIL_SMTP_SERVER / MAIL_SMTP_PORT / MAIL_USERNAME / MAIL_PASSWORD"
-            exit 0
-          fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-
-          NOW="$(date '+%Y-%m-%d %H:%M JST')"
-          TARGET="${{ github.event.inputs.target_date }}"
-          if [ -z "$TARGET" ]; then
-            TARGET="$(date '+%Y%m%d')（今日）"
-          fi
-
-          if [ "$UPDATE_RESULT" = "success" ]; then
-            STATUS_JP="成功"
-            SUBJECT="【tdnet】更新しました。チェックしてください（${NOW}）"
-            INTRO="日次更新が完了しました。内容を確認してください。"
-          else
-            STATUS_JP="失敗"
-            SUBJECT="【tdnet】更新に失敗しました。チェックしてください（${NOW}）"
-            INTRO="日次更新が失敗しました。Actionsログを確認してください。"
-          fi
-
-          {
-            echo "${INTRO}"
-            echo ""
-            echo "結果: ${STATUS_JP}"
-            echo "対象: ${TARGET}"
-            echo "完了時刻: ${NOW}"
-            echo "実行: ${{ github.event_name }}"
-            echo "ワークフロー: ${{ github.workflow }}"
-            echo "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "Viewer: https://onokazu777.github.io/tdnet-viewer/"
-            echo "Drive: Google Drive の TDnet_Downloads"
-          } > mail_body.txt
-
-          {
-            echo "subject<<EOF"
-            echo "$SUBJECT"
-            echo "EOF"
-            echo "body<<EOF"
-            cat mail_body.txt
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          PORT="${MAIL_SMTP_PORT:-465}"
-          echo "port=$PORT" >> "$GITHUB_OUTPUT"
-          if [ "$PORT" = "465" ]; then
-            echo "secure=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "secure=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Send completion email
-        if: steps.mail.outputs.configured == 'true'
-        uses: dawidd6/action-send-mail@v4
-        with:
-          server_address: ${{ env.MAIL_SMTP_SERVER }}
-          server_port: ${{ steps.mail.outputs.port }}
-          secure: ${{ steps.mail.outputs.secure }}
-          username: ${{ env.MAIL_USERNAME }}
-          password: ${{ env.MAIL_PASSWORD }}
-          subject: ${{ steps.mail.outputs.subject }}
-          to: ono@links-research.com
-          from: TDnet Update <${{ env.MAIL_USERNAME }}>
-          body: ${{ steps.mail.outputs.body }}
-          convert_markdown: false
+        shell: bash
+        run: |
+          python3 <<'PY'
+          import os
+          import smtplib
+          import ssl
+          from email.message import EmailMessage
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          server = (os.environ.get("MAIL_SMTP_SERVER") or "").strip()
+          port_raw = (os.environ.get("MAIL_SMTP_PORT") or "587").strip() or "587"
+          username = (os.environ.get("MAIL_USERNAME") or "").strip()
+          # アプリパスワードに含まれるスペースを除去
+          password = (os.environ.get("MAIL_PASSWORD") or "").replace(" ", "").strip()
+          to_addr = "ono@links-research.com"
+
+          if not (server and username and password):
+              print("MAIL_* secrets が未設定のため、完了メールをスキップします")
+              print("必要: MAIL_SMTP_SERVER / MAIL_SMTP_PORT / MAIL_USERNAME / MAIL_PASSWORD")
+              raise SystemExit(0)
+
+          try:
+              port = int(port_raw)
+          except ValueError:
+              raise SystemExit(f"MAIL_SMTP_PORT が不正です: {port_raw!r}")
+
+          now = datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d %H:%M JST")
+          target = (os.environ.get("TARGET_DATE_INPUT") or "").strip() or f"{datetime.now(ZoneInfo('Asia/Tokyo')).strftime('%Y%m%d')}（今日）"
+          ok = os.environ.get("UPDATE_RESULT") == "success"
+
+          if ok:
+              status = "成功"
+              subject = f"【tdnet】更新しました。チェックしてください（{now}）"
+              intro = "日次更新が完了しました。内容を確認してください。"
+          else:
+              status = "失敗"
+              subject = f"【tdnet】更新に失敗しました。チェックしてください（{now}）"
+              intro = "日次更新が失敗しました。Actionsログを確認してください。"
+
+          body = "\n".join([
+              intro,
+              "",
+              f"結果: {status}",
+              f"対象: {target}",
+              f"完了時刻: {now}",
+              f"実行: {os.environ.get('EVENT_NAME', '')}",
+              f"ワークフロー: {os.environ.get('WORKFLOW_NAME', '')}",
+              f"Run: {os.environ.get('RUN_URL', '')}",
+              "Viewer: https://onokazu777.github.io/tdnet-viewer/",
+              "Drive: Google Drive の TDnet_Downloads",
+          ])
+
+          msg = EmailMessage()
+          msg["Subject"] = subject
+          msg["From"] = f"TDnet Update <{username}>"
+          msg["To"] = to_addr
+          msg.set_content(body)
+
+          print(f"SMTP server={server} port={port} user={username} to={to_addr}")
+          print(f"password_length={len(password)} (spaces stripped)")
+
+          try:
+              if port == 465:
+                  context = ssl.create_default_context()
+                  with smtplib.SMTP_SSL(server, port, context=context, timeout=60) as smtp:
+                      smtp.login(username, password)
+                      smtp.send_message(msg)
+              else:
+                  with smtplib.SMTP(server, port, timeout=60) as smtp:
+                      smtp.ehlo()
+                      smtp.starttls(context=ssl.create_default_context())
+                      smtp.ehlo()
+                      smtp.login(username, password)
+                      smtp.send_message(msg)
+          except smtplib.SMTPAuthenticationError as exc:
+              print("SMTP認証に失敗しました (535 BadCredentials)。")
+              print("確認事項:")
+              print("1. MAIL_USERNAME は送信元 Gmail（例: ono.happy@gmail.com）")
+              print("2. MAIL_PASSWORD は通常パスワードではなく、16桁のアプリパスワード")
+              print("3. アプリパスワードはスペースなしで登録（このスクリプトでも除去します）")
+              print("4. https://myaccount.google.com/apppasswords で送信元アカウントのものを発行")
+              print("5. MAIL_SMTP_PORT は 587 を推奨（smtp.gmail.com）")
+              raise SystemExit(f"SMTPAuthenticationError: {exc}") from exc
+
+          print("Completion email sent.")
+          PY
