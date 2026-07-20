@@ -2,9 +2,13 @@ name: Daily XBRL Update
 
 on:
   schedule:
-    # 単発cronは数時間遅延することがあるため、平日は短間隔起動し枠内だけ本番実行する。
-    # UTC 02:00-15:59 = JST 11:00-00:59（月-金）
-    - cron: '*/5 2-15 * * 1-5'
+    # 明示時刻（JST）+ 遅延救済の5分ポーリング。枠判定で各枠は1日1回だけ実行。
+    - cron: '35 2 * * 1-5'    # 11:35 JST
+    - cron: '35 6 * * 1-5'    # 15:35 JST
+    - cron: '5 8 * * 1-5'     # 17:05 JST
+    - cron: '5 11 * * 1-5'    # 20:05 JST
+    - cron: '55 14 * * 1-5'   # 23:55 JST
+    - cron: '*/5 2-15 * * 1-5'  # 11:00-00:59 JST の遅延救済
   workflow_dispatch:
     inputs:
       target_date:
