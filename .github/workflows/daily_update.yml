@@ -2,7 +2,8 @@ name: Daily XBRL Update
 
 on:
   schedule:
-    # JST 15:35, 17:05, 20:05, 23:55 (UTC 06:35, 08:05, 11:05, 14:55) ※平日のみ
+    # JST 11:35, 15:35, 17:05, 20:05, 23:55 (UTC 02:35, 06:35, 08:05, 11:05, 14:55) ※平日のみ
+    - cron: '35 2 * * 1-5'
     - cron: '35 6 * * 1-5'
     - cron: '5 8 * * 1-5'
     - cron: '5 11 * * 1-5'
@@ -240,11 +241,16 @@ jobs:
             echo "Pushed new data for $TODAY"
           fi
 
-  # 成功・失敗どちらでも完了メールを送る（Secrets未設定ならスキップ）
+  # 11:35 / 15:35（および手動実行）のときだけ完了メールを送る
   notify:
     name: Notify by email
     needs: update
-    if: always() && !cancelled()
+    if: >
+      always() && !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        github.event.schedule == '35 2 * * 1-5' ||
+        github.event.schedule == '35 6 * * 1-5'
+      )
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Tokyo
