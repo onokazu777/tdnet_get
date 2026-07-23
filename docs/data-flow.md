@@ -1,5 +1,15 @@
 # データフローとファイル一覧
 
+## 起動（いつ動くか）
+
+現行本番では、外部cronがGitHub Actionsを起動します。処理の中身はこの文書のとおりです。
+
+```text
+外部cron → workflow_dispatch(slot) → Daily XBRL Update → 下記のデータフロー
+```
+
+起動仕様の詳細は [on-time-trigger.md](on-time-trigger.md) と [operations.md](operations.md) を参照してください。
+
 ## 日次処理の流れ
 
 ```mermaid

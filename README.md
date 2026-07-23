@@ -2,7 +2,30 @@
 
 TDnetから適時開示資料（PDF・XBRL）を取得し、キーワード検索用データと財務分析データを生成・公開するシステムです。
 
-現在の日次処理はGitHub Actions上で動作するため、PCの電源が切れていても実行されます。取得したPDF・CSVは個人のGoogle Driveへ保存し、XBRL分析結果は別リポジトリのGitHub Pagesで公開します。
+処理本体はGitHub Actions（`Daily XBRL Update`）で動くため、PCの電源は不要です。  
+**起動（いつ走らせるか）は外部cron（cron-job.org）が担います。** GitHub標準の`schedule`は遅延が大きいため予備です。
+
+取得したPDF・CSVは個人のGoogle Driveへ保存し、XBRL分析結果は別リポジトリのGitHub Pagesで公開します。
+
+## 現行仕様（起動）
+
+```text
+外部cron（cron-job.org）
+  平日 11:35 / 15:35 / 17:05 / 20:05 / 23:55（JST）※運用で数分ずらす場合あり
+    → GitHub API（workflow_dispatch, slot指定）
+      → Daily XBRL Update
+        → PDF/CSV → Google Drive
+        → JSON → tdnet-viewer → GitHub Pages
+```
+
+| 以前 | 現在 |
+|---|---|
+| PCのタスクスケジューラ（`TDnet_Daily_Auto_Local`） | **使わない（無効でよい）** |
+| GitHub Actions の `schedule` を本番時刻にする | **予備のみ**（遅延するため） |
+| — | **外部cronが本番の起動源** |
+
+詳細な設定手順: [docs/on-time-trigger.md](docs/on-time-trigger.md)  
+運用・障害対応: [docs/operations.md](docs/operations.md)
 
 ## 公開先・管理画面
 
@@ -31,24 +54,25 @@ flowchart LR
     VR --> ST[Streamlitクラウド検索用データ]
 ```
 
-平日に次の枠で取得します（JST）。
+平日に次の枠で取得します（JST）。起動は外部cronが行います。
 
-| 回 | 枠の開始 | 目的 | 完了メール |
-|---|---|---|---|
-| 1回目 | 11:35 | 午前の開示を取り込む | 送る |
-| 2回目 | 15:35 | 15:30前後の大量開示を取り込む | 送る |
-| 3回目 | 17:05 | 午後の追加開示を取り込む | 送らない |
-| 4回目 | 20:05 | 夕方の追加開示を取り込む | 送らない |
-| 5回目 | 23:55 | 当日分の取りこぼしを取り込む | 送らない |
+| 回 | 枠ID (`slot`) | 目安時刻 | 目的 | 完了メール |
+|---|---|---|---|---|
+| 1回目 | `1135` | 11:35 | 午前の開示を取り込む | 送る |
+| 2回目 | `1535` | 15:35 | 15:30前後の大量開示を取り込む | 送る |
+| 3回目 | `1705` | 17:05 | 午後の追加開示を取り込む | 送らない |
+| 4回目 | `2005` | 20:05 | 夕方の追加開示を取り込む | 送らない |
+| 5回目 | `2355` | 23:55 | 当日分の取りこぼしを取り込む | 送らない |
 
-**本番の起動は外部cron（時刻どおり）** です。GitHub の `schedule` は遅延するため予備扱いです。  
-設定手順: [docs/on-time-trigger.md](docs/on-time-trigger.md)
+cron側の時計は数分ずらして運用してよいですが、**Bodyの`slot`は上表のIDのまま**にしてください（例: 17:01起動でも `slot` は `1705`）。
 
 
 ## 主な構成
 
 - `.github/workflows/daily_update.yml`  
-  PC不要の日次処理。PDF・CSVのGoogle Drive保存と`tdnet-viewer`の更新まで行います。
+  日次処理本体。外部cronまたは手動の`workflow_dispatch`、および予備の`schedule`で起動します。
+- 外部cron（cron-job.org）  
+  **本番の時刻起動**。設定は[on-time-trigger.md](docs/on-time-trigger.md)。
 - `.github/workflows/keepalive.yml`  
   GitHubの「公開リポジトリが60日間無活動だとscheduleを停止する」仕様を回避するため、月1回空コミットを作成します。
 - `①_...py` ～ `⑥_...py`  
@@ -56,7 +80,7 @@ flowchart LR
 - `keyword_search_app.py`  
   ローカルPDF・ローカルJSON・GitHub Pages上のJSONを検索するStreamlitアプリです。
 - `run_auto_local.py` / `auto_local.bat`  
-  PC上でPDF・CSVをGoogle Driveへ保存する旧ローカル経路です。GitHub Pagesの更新は行いません。
+  PC上でPDF・CSVをGoogle Driveへ保存する**旧ローカル経路**です。現行本番では使いません。
 
 ## 詳細ドキュメント
 

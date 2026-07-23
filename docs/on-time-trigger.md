@@ -1,7 +1,10 @@
 # 時刻どおり起動する（外部cron）
 
+> **現行の本番仕様です（2026-07-23〜）。**  
+> 処理はGitHub Actions、**起動は外部cron**。PCのタスクスケジューラや、Actionsの`schedule`を本番時刻に使わないでください。
+
 GitHub Actions の `schedule` は混雑時に **数十分〜数時間遅れる**ことがあります。  
-本番の起動は、外部cronから `workflow_dispatch` を叩く方式にします。
+そのため本番の起動は、外部cron（[cron-job.org](https://cron-job.org/)）から `workflow_dispatch` を叩く方式にしています。
 
 ## 方式の概要
 

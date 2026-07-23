@@ -2,24 +2,40 @@
 
 ## 通常運用
 
-日次処理はGitHub Actions上で動きますが、**起動時刻の本番トリガーは外部cron**です。  
-GitHub 独自の `schedule` は遅延が大きいため予備です。
+### 現行仕様（2026-07-23 確定）
 
-狙いの開始時刻（JST・平日）:
+| 項目 | 内容 |
+|---|---|
+| 処理の実行場所 | GitHub Actions（`Daily XBRL Update`） |
+| **起動の本番トリガー** | **外部cron（cron-job.org）→ `workflow_dispatch`（`slot`指定）** |
+| GitHub `schedule` | 予備のみ（遅延するため本番時刻には使わない） |
+| PCタスク（`TDnet_Daily_Auto_Local`） | 旧方式。無効のままでよい |
+| 完了メール | `slot=1135` / `1535`（および画面からの手動）のみ |
 
-- 11:35（メールあり）
-- 15:35（メールあり）
-- 17:05
-- 20:05
-- 23:55
+狙いの開始時刻（JST・平日。cron側で数分ずらしてもよい）:
+
+- 11:35（メールあり）→ `slot=1135`
+- 15:35（メールあり）→ `slot=1535`
+- 17:05 → `slot=1705`
+- 20:05 → `slot=2005`
+- 23:55 → `slot=2355`
 
 設定手順（必須）: [時刻どおり起動する（外部cron）](on-time-trigger.md)
+
+### 仕様変更メモ
+
+| 時期 | 変更 |
+|---|---|
+| 〜2026-07頃 | PCのWindowsタスクがPDF/CSVをDriveへ保存。Viewer更新は別途Actions |
+| 2026-07 | 処理をGitHub Actionsへ集約（PC不要化）。起動はActionsの`schedule` |
+| **2026-07-23** | **起動を外部cronへ変更**（Actionsの`schedule`遅延が大きかったため） |
 
 確認先:
 
 - Actions: https://github.com/onokazu777/tdnet_get/actions
 - 公開Viewer: https://onokazu777.github.io/tdnet-viewer/
 - PDF・CSV: 個人Google Driveの`TDnet_Downloads`
+- 外部cron: https://cron-job.org/ （ジョブ一覧）
 
 1日に複数回実行する理由は、当日中に追加されたTDnet開示を段階的に取り込むためです。既存PDFは原則スキップし、公開データは詳細JSON名で重複を避けてマージします。
 
