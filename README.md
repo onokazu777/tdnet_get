@@ -31,10 +31,7 @@ flowchart LR
     VR --> ST[Streamlitクラウド検索用データ]
 ```
 
-平日にGitHub Actionsが次の時刻で起動します（JST）。
-
-平日にGitHub Actionsが次の枠で取得します（JST）。  
-※ GitHubの単発cronは数時間遅れることがあるため、**5分おきに起動して枠判定**する方式です。各枠は「開始時刻〜次枠直前」のあいだに1回だけ実行します。
+平日に次の枠で取得します（JST）。
 
 | 回 | 枠の開始 | 目的 | 完了メール |
 |---|---|---|---|
@@ -44,7 +41,8 @@ flowchart LR
 | 4回目 | 20:05 | 夕方の追加開示を取り込む | 送らない |
 | 5回目 | 23:55 | 当日分の取りこぼしを取り込む | 送らない |
 
-さらに時刻を厳守したい場合は、外部cronから手動実行APIを叩く方法もあります（[運用・障害対応](docs/operations.md#時刻どおり起動したい場合)）。
+**本番の起動は外部cron（時刻どおり）** です。GitHub の `schedule` は遅延するため予備扱いです。  
+設定手順: [docs/on-time-trigger.md](docs/on-time-trigger.md)
 
 
 ## 主な構成
@@ -66,6 +64,7 @@ flowchart LR
 - [データフローとファイル一覧](docs/data-flow.md)
 - [プログラム一覧](docs/programs.md)
 - [運用・障害対応](docs/operations.md)
+- [時刻どおり起動（外部cron）](docs/on-time-trigger.md)
 
 ## ローカル環境
 

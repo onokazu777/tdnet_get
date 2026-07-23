@@ -1,23 +1,31 @@
 name: Daily XBRL Update
 
 on:
+  # GitHub独自のscheduleは遅延が大きいため、本番起動は外部cronのworkflow_dispatchを使う。
+  # ここは予備（遅れた場合のキャッチアップ）として残す。
   schedule:
-    # 明示時刻（JST）+ 遅延救済の5分ポーリング。枠判定で各枠は1日1回だけ実行。
     - cron: '35 2 * * 1-5'    # 11:35 JST
     - cron: '35 6 * * 1-5'    # 15:35 JST
     - cron: '5 8 * * 1-5'     # 17:05 JST
     - cron: '5 11 * * 1-5'    # 20:05 JST
     - cron: '55 14 * * 1-5'   # 23:55 JST
-    - cron: '*/5 2-15 * * 1-5'  # 11:00-00:59 JST の遅延救済
   workflow_dispatch:
     inputs:
       target_date:
         description: '対象日付（空欄=今日, YYYYMMDD=指定日, "YYYYMMDD YYYYMMDD"=範囲）'
         required: false
         default: ''
+      slot:
+        description: '実行枠 (1135/1535/1705/2005/2355)。空欄=現在時刻から判定。manual=強制実行（メールあり）'
+        required: false
+        default: ''
+      force:
+        description: 'true なら同一枠の再実行を許可'
+        required: false
+        default: 'false'
 
 jobs:
-  # いま実行すべき枠か判定（GitHub schedule遅延対策）
+  # いま実行すべき枠か判定
   gate:
     name: Decide slot
     runs-on: ubuntu-latest
@@ -32,13 +40,14 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           TARGET_DATE_INPUT: ${{ github.event.inputs.target_date }}
+          SLOT_INPUT: ${{ github.event.inputs.slot }}
+          FORCE_INPUT: ${{ github.event.inputs.force }}
         run: |
           python3 <<'PY'
           import os
           from datetime import datetime, timedelta
           from zoneinfo import ZoneInfo
 
-          # 枠: 開始時刻(JST)から次枠直前までキャッチアップ可。メールは1135/1535のみ。
           # (slot_id, start_h, start_m, send_mail)
           SLOT_STARTS = [
               ("1135", 11, 35, True),
@@ -47,55 +56,76 @@ jobs:
               ("2005", 20, 5, False),
               ("2355", 23, 55, False),
           ]
+          SLOT_MAIL = {s: m for s, _, _, m in SLOT_STARTS}
+          VALID = {s for s, _, _, _ in SLOT_STARTS} | {"manual"}
 
           now = datetime.now(ZoneInfo("Asia/Tokyo"))
           event = os.environ.get("EVENT_NAME", "")
+          slot_in = (os.environ.get("SLOT_INPUT") or "").strip().lower()
+          force = (os.environ.get("FORCE_INPUT") or "").strip().lower() in ("true", "1", "yes")
 
-          def emit(should_run, slot, send_mail, today):
+          def emit(should_run, slot, send_mail, today, force_flag=False):
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
                   f.write(f"should_run={should_run}\n")
                   f.write(f"slot={slot}\n")
                   f.write(f"send_mail={str(send_mail).lower()}\n")
                   f.write(f"today={today}\n")
-              print(f"decide: should_run={should_run} slot={slot} send_mail={send_mail} now={now:%Y-%m-%d %H:%M JST}")
+                  f.write(f"force={str(force_flag).lower()}\n")
+              print(
+                  f"decide: should_run={should_run} slot={slot} send_mail={send_mail} "
+                  f"force={force_flag} now={now:%Y-%m-%d %H:%M JST} event={event}"
+              )
 
-          if event == "workflow_dispatch":
-              today = (os.environ.get("TARGET_DATE_INPUT") or "").strip() or now.strftime("%Y%m%d")
-              # 手動は常に実行。メールも送る（確認用）
-              emit("true", "manual", True, today.split()[0] if today else now.strftime("%Y%m%d"))
-              raise SystemExit(0)
+          def today_from_input():
+              raw = (os.environ.get("TARGET_DATE_INPUT") or "").strip()
+              if not raw:
+                  return now.strftime("%Y%m%d")
+              return raw.split()[0]
 
-          # schedule: 直近の開始済み枠を1つ選ぶ（次枠開始前まで有効）
-          minutes = now.hour * 60 + now.minute
-          chosen = None
-          for i, (slot, h, m, mail) in enumerate(SLOT_STARTS):
-              start = h * 60 + m
-              if i + 1 < len(SLOT_STARTS):
-                  nh, nm, _ = SLOT_STARTS[i + 1][1], SLOT_STARTS[i + 1][2], SLOT_STARTS[i + 1][3]
-                  end = nh * 60 + nm
+          def choose_from_clock():
+              minutes = now.hour * 60 + now.minute
+              for i, (slot, h, m, mail) in enumerate(SLOT_STARTS):
+                  start = h * 60 + m
+                  if i + 1 < len(SLOT_STARTS):
+                      end = SLOT_STARTS[i + 1][1] * 60 + SLOT_STARTS[i + 1][2]
+                  else:
+                      end = 24 * 60 + 60
+                  adj = minutes
+                  day = now.strftime("%Y%m%d")
+                  if slot == "2355" and minutes < 60:
+                      adj = minutes + 24 * 60
+                      day = (now - timedelta(days=1)).strftime("%Y%m%d")
+                  if start <= adj < end:
+                      return slot, mail, day
+              return None
+
+          # 明示slot指定（外部cron向け）
+          if slot_in:
+              if slot_in not in VALID:
+                  raise SystemExit(f"invalid slot: {slot_in!r}")
+              day = today_from_input()
+              if slot_in == "manual":
+                  emit("true", "manual", True, day, force)
               else:
-                  # 23:55枠は翌日01:00まで（深夜遅延の救済）
-                  end = 24 * 60 + 60
-              # 翌日01:00前の早朝は、前日2355の継続とみなす
-              adj_minutes = minutes
-              day = now.strftime("%Y%m%d")
-              if slot == "2355" and minutes < 60:
-                  adj_minutes = minutes + 24 * 60
-                  day = (now - timedelta(days=1)).strftime("%Y%m%d")
-              if start <= adj_minutes < end:
-                  chosen = (slot, mail, day)
-                  break
-
-          if not chosen:
-              emit("false", "none", False, now.strftime("%Y%m%d"))
+                  emit("true", slot_in, SLOT_MAIL[slot_in], day, force)
               raise SystemExit(0)
 
+          # 手動でslot未指定: テスト用に常に実行＋メール
+          if event == "workflow_dispatch":
+              emit("true", "manual", True, today_from_input(), force)
+              raise SystemExit(0)
+
+          # schedule: 現在時刻の枠
+          chosen = choose_from_clock()
+          if not chosen:
+              emit("false", "none", False, now.strftime("%Y%m%d"), False)
+              raise SystemExit(0)
           slot, mail, day = chosen
-          emit("true", slot, mail, day)
+          emit("true", slot, mail, day, False)
           PY
 
       - name: Check if this slot already ran today
-        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual'
+        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual' && steps.decide.outputs.force != 'true'
         id: dedup
         uses: actions/cache@v4
         with:
@@ -104,7 +134,7 @@ jobs:
 
       - name: Skip if slot already completed
         id: skip
-        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual' && steps.dedup.outputs.cache-hit == 'true'
+        if: steps.decide.outputs.should_run == 'true' && steps.decide.outputs.slot != 'manual' && steps.decide.outputs.force != 'true' && steps.dedup.outputs.cache-hit == 'true'
         run: |
           echo "Slot ${{ steps.decide.outputs.slot }} already completed for ${{ steps.decide.outputs.today }} — skip"
           echo "should_run=false" >> "$GITHUB_OUTPUT"

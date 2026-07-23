@@ -47,9 +47,9 @@ flowchart TB
 
 - リポジトリ: `onokazu777/tdnet_get`
 - ワークフロー: `.github/workflows/daily_update.yml`
-- 定期実行: 平日5分おき起動＋枠判定（11:35 / 15:35 / 17:05 / 20:05 / 23:55 JST）
-- 完了メール: 11:35 / 15:35（および手動実行）のみ
-- 備考: GitHub単発cronの長時間遅延対策として枠判定方式を採用
+- 定期実行: **本番は外部cron** → `workflow_dispatch`（slot: 1135/1535/1705/2005/2355）。GitHub `schedule` は予備
+- 完了メール: 1135 / 1535（および手動）のみ
+- 手順: [on-time-trigger.md](on-time-trigger.md)
 - 手動実行: Actions画面の`Run workflow`
 
 ### 2. GitHub Actions
