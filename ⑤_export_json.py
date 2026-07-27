@@ -44,6 +44,53 @@ SALES_CHANGE_LABELS = {
 }
 
 
+def parse_excel_stem(stem: str):
+    """XBRL分析 Excel の stem から code / company を取り出す。
+
+    新形式: XBRL分析_{code}_{company}__{suffix}
+    旧形式: XBRL分析_{code}_{company}
+    """
+    m = re.match(r'XBRL[^_]*_([^_]+)_(.+)', stem)
+    if not m:
+        return None, None
+    code, company = m.group(1), m.group(2)
+    company = re.sub(r'__.+$', '', company)
+    return code, company
+
+
+def resolve_pdf_url(pdf_links, code: str, title: str):
+    """pdf_links.json から開示単位で PDF URL を解決する。"""
+    if not pdf_links:
+        return None
+
+    # 新形式: {"items":[{code,title,pdf_url},...], "2767": "..."}
+    if isinstance(pdf_links, dict):
+        items = pdf_links.get("items")
+        if isinstance(items, list):
+            for it in items:
+                if not isinstance(it, dict):
+                    continue
+                if it.get("code") == code and it.get("title") == title and it.get("pdf_url"):
+                    return it["pdf_url"]
+            for it in items:
+                if isinstance(it, dict) and it.get("code") == code and it.get("pdf_url"):
+                    return it["pdf_url"]
+        url = pdf_links.get(code)
+        if isinstance(url, str):
+            return url
+        return None
+
+    # リスト形式のみ
+    if isinstance(pdf_links, list):
+        for it in pdf_links:
+            if isinstance(it, dict) and it.get("code") == code and it.get("title") == title and it.get("pdf_url"):
+                return it["pdf_url"]
+        for it in pdf_links:
+            if isinstance(it, dict) and it.get("code") == code and it.get("pdf_url"):
+                return it["pdf_url"]
+    return None
+
+
 def safe_val(v):
     """JSON互換の値に変換"""
     if v is None:
@@ -285,10 +332,9 @@ def main():
                 pass
 
         for xf in sorted(dd.glob("XBRL*_*.xlsx")):
-            m = re.match(r'XBRL[^_]*_([^_]+)_(.+)', xf.stem)
-            if not m:
+            code, company = parse_excel_stem(xf.stem)
+            if not code:
                 continue
-            code, company = m.group(1), m.group(2)
 
             # 詳細JSONファイル名（同一日付+コードの重複対応）
             base_key = f"{d}_{code}"
@@ -314,9 +360,10 @@ def main():
                 'op_diff': safe_val(s['op_diff']),
                 'detail': detail_name,
             }
-            # PDFリンクがあれば追加
-            if code in pdf_links:
-                entry['pdf_url'] = pdf_links[code]
+            # PDFリンクがあれば追加（表題一致を優先）
+            pdf_url = resolve_pdf_url(pdf_links, code, s.get('title') or '')
+            if pdf_url:
+                entry['pdf_url'] = pdf_url
             index_entries.append(entry)
 
             # 詳細JSON生成（更新チェック）

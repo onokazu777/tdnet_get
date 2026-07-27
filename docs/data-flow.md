@@ -138,12 +138,12 @@ PDF本文を開かず、一覧CSVの表題だけを高速検索します。現�
 ```text
 <xbrl-root>/
 └─ YYYYMMDD/
-   ├─ <XBRL ZIPファイル>.zip
-   ├─ XBRL分析_<コード>_<会社名>.xlsx
+   ├─ <コード>_<会社名>__<表題短縮>_<hash>_xbrl.zip
+   ├─ XBRL分析_<コード>_<会社名>__<表題短縮>_<hash>.xlsx
    └─ pdf_links.json
 ```
 
-Excelには会社情報、財務データ、前期比、大幅変動科目、利益率等を出力します。`pdf_links.json`は会社コードとTDnet PDF URLの対応表で、⑤が公開用JSONへURLを引き継ぐために使います。
+Excelには会社情報、財務データ、前期比、大幅変動科目、利益率等を出力します。同一銘柄が同日に複数のXBRL開示を出した場合も、表題ごとに別ZIP・別Excelとして保存します。`pdf_links.json`は開示単位のPDF URL一覧（`items`）と、後方互換の会社コード→URLを持ち、⑤が公開用JSONへURLを引き継ぐために使います。
 
 保存ルート:
 

@@ -40,9 +40,9 @@
 - 実行場所: GitHub Actions / PC
 - 入力: TDnet一覧HTML、XBRL ZIP、`xbrl_taxonomy.py`
 - 出力:
-  - XBRL ZIP
-  - `XBRL分析_<コード>_<会社名>.xlsx`
-  - `pdf_links.json`
+  - XBRL ZIP（`<コード>_<会社名>__<表題短縮>_<hash>_xbrl.zip`）
+  - `XBRL分析_<コード>_<会社名>__<表題短縮>_<hash>.xlsx`（同日同社の複数開示は別名）
+  - `pdf_links.json`（`items` 配列で開示単位 + 後方互換の code→url）
 - 呼び出し元: `.github/workflows/daily_update.yml`または手動
 - 主な引数:
   - `--target`

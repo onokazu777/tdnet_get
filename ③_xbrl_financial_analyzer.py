@@ -23,6 +23,7 @@
 import os
 import sys
 import datetime
+import hashlib
 import requests
 import pandas as pd
 import time
@@ -100,6 +101,17 @@ def safe_filename(s: str, max_len: int = 120) -> str:
     if len(s) > max_len:
         s = s[:max_len].rstrip()
     return s
+
+
+def disclosure_file_suffix(title: str, xbrl_url: str = "") -> str:
+    """同一銘柄の複数開示を区別するファイル名サフィックス。
+
+    表題の短縮形 + 短いハッシュで、切り詰め衝突を防ぐ。
+    """
+    slug = safe_filename(title or "xbrl", max_len=40) or "xbrl"
+    digest_src = (title or "") + "|" + (xbrl_url or "")
+    h = hashlib.md5(digest_src.encode("utf-8")).hexdigest()[:6]
+    return f"{slug}_{h}"
 
 
 def is_excluded(title: str) -> bool:
@@ -1072,10 +1084,14 @@ def process_single_xbrl(zip_path, company_info, threshold, output_dir):
             direction = "↑" if rate > 0 else "↓"
             print(f"      {direction} {label}: {rate:+.1%}")
 
-    # Excel出力
+    # Excel出力（同一銘柄・同日の複数開示は file_suffix で区別）
     code = company_info.get("code", "unknown")
     name = safe_filename(company_info.get("name", "unknown"), max_len=20)
-    excel_name = f"XBRL分析_{code}_{name}.xlsx"
+    suffix = company_info.get("file_suffix")
+    if suffix:
+        excel_name = f"XBRL分析_{code}_{name}__{suffix}.xlsx"
+    else:
+        excel_name = f"XBRL分析_{code}_{name}.xlsx"
     excel_path = output_dir / excel_name
 
     export_to_excel(company_info, summary_df, significant_df, margins_df, raw_df, str(excel_path))
@@ -1122,28 +1138,40 @@ def main():
 
         print(f"   📦 XBRL対象: {len(xbrl_entries)} 件")
 
-        # PDFリンクをJSON保存
-        pdf_links = {}
+        # PDFリンクをJSON保存（開示単位。旧形式の code→url も併記）
+        pdf_items = []
+        pdf_by_code = {}
         for e in xbrl_entries:
             if e.get("pdf_url"):
-                pdf_links[e["code"]] = e["pdf_url"]
-        if pdf_links:
+                item = {
+                    "code": e["code"],
+                    "title": e["title"],
+                    "pdf_url": e["pdf_url"],
+                }
+                pdf_items.append(item)
+                pdf_by_code[e["code"]] = e["pdf_url"]
+        if pdf_items:
             import json as _json
             pdf_path = day_dir / "pdf_links.json"
-            with open(pdf_path, 'w', encoding='utf-8') as _f:
-                _json.dump(pdf_links, _f, ensure_ascii=False, indent=2)
-            print(f"   📎 PDFリンク保存: {len(pdf_links)} 件")
+            payload = {"items": pdf_items, **pdf_by_code}
+            with open(pdf_path, "w", encoding="utf-8") as _f:
+                _json.dump(payload, _f, ensure_ascii=False, indent=2)
+            print(f"   📎 PDFリンク保存: {len(pdf_items)} 件")
 
         for entry in xbrl_entries:
             code = entry["code"]
             name = entry["name"]
             title = entry["title"]
+            file_suffix = disclosure_file_suffix(title, entry.get("xbrl_url", ""))
 
             print(f"\n   --- {code} {name} ---")
             print(f"   📄 {title}")
 
-            # ZIPダウンロード
-            zip_name = f"{safe_filename(code, 4)}_{safe_filename(name, 20)}_xbrl.zip"
+            # ZIPダウンロード（表題ごとに別名。同日同社の上書きを防ぐ）
+            zip_name = (
+                f"{safe_filename(code, 4)}_{safe_filename(name, 20)}"
+                f"__{file_suffix}_xbrl.zip"
+            )
             zip_path = day_dir / zip_name
 
             if zip_path.exists():
@@ -1165,6 +1193,7 @@ def main():
                     "name": name,
                     "title": title,
                     "date": target_date_str,
+                    "file_suffix": file_suffix,
                 }
                 process_single_xbrl(zip_path, company_info, args.threshold, day_dir)
                 total_analyzed += 1

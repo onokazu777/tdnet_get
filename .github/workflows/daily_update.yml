@@ -301,17 +301,18 @@ jobs:
           # 重複チェック（detailファイル名で判定）してマージ
           existing_map = {e['detail']: e for e in existing}
           added = 0
+          updated = 0
           for entry in new_entries:
               if entry['detail'] not in existing_map:
                   existing.append(entry)
+                  existing_map[entry['detail']] = entry
                   added += 1
               else:
-                  # 既存エントリの株価指標・PDFリンクを更新
-                  for k in ('pbr', 'forward_pe', 'div_yield', 'pdf_url'):
-                      if k in entry:
-                          existing_map[entry['detail']][k] = entry[k]
+                  # 同 detail は内容ごと更新（同日複数XBRLの再取得で表題等が変わるため）
+                  existing_map[entry['detail']].update(entry)
+                  updated += 1
 
-          print(f'Existing: {len(existing) - added}, New: {added}, Total: {len(existing)}')
+          print(f'Existing kept/updated: {len(existing) - added}, Added: {added}, Updated: {updated}, Total: {len(existing)}')
 
           # index.json 更新
           with open('viewer/data/index.json', 'w', encoding='utf-8') as f:
