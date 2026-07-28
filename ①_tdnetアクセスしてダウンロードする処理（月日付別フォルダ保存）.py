@@ -179,6 +179,25 @@ def is_excluded(title: str) -> bool:
     return any(nfkc(k) in t for k in EXCLUDE_KEYWORDS)
 
 
+def is_valid_tdnet_data_row(r_time: str, r_code: str, r_name: str, r_title: str, n_cols: int) -> bool:
+    """TDnet一覧の実データ行か判定（ヘッダー／ページネーション行を除外）。"""
+    if n_cols > 15:
+        return False
+    if not re.fullmatch(r"\d{1,2}:\d{2}", r_time or ""):
+        return False
+    code4 = (r_code[:4] or "").strip()
+    if not re.fullmatch(r"[0-9A-Za-z]{4}", code4):
+        return False
+    if not (r_name or "").strip():
+        return False
+    title = r_title or ""
+    if re.search(r"前へ|次へ|全\d+件|\d+\s*[〜~\-－]\s*\d+\s*件", title):
+        return False
+    if "に開示された情報" in (r_code or "") or "に開示された情報" in title:
+        return False
+    return True
+
+
 def safe_filename(s: str, max_len: int = 120) -> str:
     """
     Drive/Windows/一般ファイルシステムで安全に扱えるようにファイル名を整形する。
@@ -334,6 +353,9 @@ def main():
                 r_code = nfkc(cols[1].get_text(strip=True))  # 4桁数字とは限らない（例: 137A）
                 r_name = nfkc(cols[2].get_text(strip=True))
                 r_title = nfkc(cols[3].get_text(strip=True))
+
+                if not is_valid_tdnet_data_row(r_time, r_code, r_name, r_title, len(cols)):
+                    continue
 
                 # 除外（完全スキップ：CSVにも入れないしPDFも取らない）
                 if is_excluded(r_title):

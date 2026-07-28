@@ -6,16 +6,18 @@
 <title>XBRL Financial Viewer</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:"Segoe UI","Meiryo",sans-serif;background:#0e1117;color:#e0e0e0;line-height:1.5}
+html,body{height:100%}
+body{font-family:"Segoe UI","Meiryo",sans-serif;background:#0e1117;color:#e0e0e0;line-height:1.5;
+  display:flex;flex-direction:column;overflow:hidden}
 a{color:#53b8f0;text-decoration:none}
 a:hover{color:#e94560;text-decoration:underline}
 
 /* ─── Header ─── */
-.header{padding:12px 24px;border-bottom:2px solid #1e2a3a}
+.header{padding:12px 24px;border-bottom:2px solid #1e2a3a;flex-shrink:0}
 .header h1{font-size:1.3rem;color:#fff}
 
 /* ─── Controls ─── */
-.controls{display:flex;gap:12px;padding:12px 24px;flex-wrap:wrap;align-items:center}
+.controls{display:flex;gap:12px;padding:12px 24px;flex-wrap:wrap;align-items:center;flex-shrink:0}
 .controls input,.controls select{
   background:#1e2a3a;color:#e0e0e0;border:1px solid #2a3a5a;
   padding:7px 12px;border-radius:4px;font-size:13px;outline:none}
@@ -24,10 +26,10 @@ a:hover{color:#e94560;text-decoration:underline}
 .controls select{min-width:140px}
 
 /* ─── Info ─── */
-.info{padding:4px 24px;font-size:12px;color:#888}
+.info{padding:4px 24px;font-size:12px;color:#888;flex-shrink:0}
 
 /* ─── Table ─── */
-.table-wrap{max-height:720px;overflow-y:auto;margin:0 24px 24px;border-radius:4px}
+.table-wrap{flex:1;min-height:0;overflow:auto;margin:0 24px 16px;border-radius:4px}
 table{width:100%;border-collapse:collapse;font-size:13px}
 thead th{position:sticky;top:0;background:#0f3460;color:#fff;padding:9px 12px;
   text-align:left;font-weight:600;border-bottom:2px solid #e94560;z-index:1;white-space:nowrap;cursor:default}
@@ -249,15 +251,24 @@ function filterAndSort() {
   let d = DATA.slice();
   if (dateVal) d = d.filter(r => r.date_raw === dateVal);
   if (search) d = d.filter(r =>
-    r.company.toLowerCase().includes(search) ||
-    r.code.toLowerCase().includes(search) ||
-    r.title.toLowerCase().includes(search));
+    (r.company || '').toLowerCase().includes(search) ||
+    (r.code || '').toLowerCase().includes(search) ||
+    (r.title || '').toLowerCase().includes(search));
   const fn = getSort(sortCol);
   d.sort((a, b) => {
     const r = compare(fn(a), fn(b));
     return sortAsc ? r : -r;
   });
   return d;
+}
+
+function isValidEntry(r) {
+  if (!r || !r.code || !/^[0-9A-Za-z]{4}$/.test(r.code)) return false;
+  if (!r.company || !String(r.company).trim()) return false;
+  const t = String(r.title || '');
+  if (/前へ|次へ|全\d+件|\d+\s*[〜~\-－]\s*\d+\s*件/.test(t)) return false;
+  if (t.includes('に開示された情報')) return false;
+  return true;
 }
 
 /* ============================================================
@@ -562,7 +573,7 @@ async function loadData() {
   document.getElementById('info').textContent = '読み込み中...';
   try {
     const res = await fetch('data/index.json');
-    DATA = await res.json();
+    DATA = (await res.json()).filter(isValidEntry);
   } catch (e) {
     document.getElementById('info').textContent = 'データ読み込みエラー: data/index.json が見つかりません';
     return;

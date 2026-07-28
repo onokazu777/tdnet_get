@@ -91,6 +91,20 @@ def resolve_pdf_url(pdf_links, code: str, title: str):
     return None
 
 
+def is_valid_index_entry(code: str, company: str, title: str) -> bool:
+    """ページネーション等のゴミ行を index に載せない。"""
+    if not code or not re.fullmatch(r"[0-9A-Za-z]{4}", code):
+        return False
+    if not (company or "").strip():
+        return False
+    t = title or ""
+    if re.search(r"前へ|次へ|全\d+件|\d+\s*[〜~\-－]\s*\d+\s*件", t):
+        return False
+    if "に開示された情報" in t:
+        return False
+    return True
+
+
 def safe_val(v):
     """JSON互換の値に変換"""
     if v is None:
@@ -336,6 +350,13 @@ def main():
             if not code:
                 continue
 
+            # サマリー情報取得
+            s = read_summary(xf)
+            title = s.get('title') or ''
+            if not is_valid_index_entry(code, company, title):
+                print(f"  skip invalid: {xf.name} code={code!r} title={title[:40]!r}")
+                continue
+
             # 詳細JSONファイル名（同一日付+コードの重複対応）
             base_key = f"{d}_{code}"
             if base_key in seen:
@@ -345,15 +366,12 @@ def main():
                 seen[base_key] = 0
                 detail_name = f"{base_key}.json"
 
-            # サマリー情報取得
-            s = read_summary(xf)
-
             entry = {
                 'date': f"{d[:4]}/{d[4:6]}/{d[6:]}",
                 'date_raw': d,
                 'code': code,
                 'company': company,
-                'title': s['title'],
+                'title': title,
                 'rev_chg': safe_val(s['rev_chg']),
                 'op_cur': safe_val(s['op_cur']),
                 'op_prev': safe_val(s['op_prev']),
@@ -361,7 +379,7 @@ def main():
                 'detail': detail_name,
             }
             # PDFリンクがあれば追加（表題一致を優先）
-            pdf_url = resolve_pdf_url(pdf_links, code, s.get('title') or '')
+            pdf_url = resolve_pdf_url(pdf_links, code, title)
             if pdf_url:
                 entry['pdf_url'] = pdf_url
             index_entries.append(entry)
