@@ -119,11 +119,23 @@ def safe_val(v):
 def read_summary(p):
     """Excelからサマリー情報を読み取る（一覧用）"""
     from openpyxl import load_workbook
-    info = {'title': '', 'op_cur': None, 'op_prev': None, 'op_diff': None, 'rev_chg': None}
+    info = {
+        'title': '', 'time': '',
+        'op_cur': None, 'op_prev': None, 'op_diff': None, 'rev_chg': None,
+    }
     try:
         wb = load_workbook(str(p), read_only=True, data_only=True)
         ws = wb[wb.sheetnames[0]]
-        info['title'] = str(ws.cell(row=3, column=2).value or '')
+        # 会社情報はラベル行から取得（行番号固定に依存しない）
+        for row in ws.iter_rows(min_row=1, max_row=8, max_col=2):
+            key = str(row[0].value or '').strip()
+            val = row[1].value
+            if key == '表題':
+                info['title'] = str(val or '')
+            elif key == '時刻':
+                info['time'] = str(val or '').strip()
+        if not info['title']:
+            info['title'] = str(ws.cell(row=3, column=2).value or '')
 
         # --- 営業利益率をSheet1から探す ---
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, max_col=4):
@@ -369,6 +381,7 @@ def main():
             entry = {
                 'date': f"{d[:4]}/{d[4:6]}/{d[6:]}",
                 'date_raw': d,
+                'time': (s.get('time') or '').strip(),
                 'code': code,
                 'company': company,
                 'title': title,

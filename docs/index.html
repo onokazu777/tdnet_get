@@ -87,8 +87,8 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
 
 <div class="controls">
   <select id="sortSelect">
-    <option value="_date_desc">日付 ↓新しい順</option>
-    <option value="_date_asc">日付 ↑古い順</option>
+    <option value="_datetime_desc">日時 ↓新しい順</option>
+    <option value="_datetime_asc">日時 ↑古い順</option>
     <option value="code_asc">コード ↑昇順</option>
     <option value="code_desc">コード ↓降順</option>
     <option value="rev_chg_desc">増収率% ↓高い順</option>
@@ -113,7 +113,7 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
 <div class="table-wrap">
   <table>
     <thead><tr>
-      <th class="sortable" data-col="_date">日付</th>
+      <th class="sortable" data-col="_datetime">日時</th>
       <th class="sortable" data-col="code">コード</th>
       <th>会社名</th>
       <th>表題</th>
@@ -149,7 +149,7 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
    State
    ============================================================ */
 let DATA = [];
-let sortCol = '_date', sortAsc = false;
+let sortCol = '_datetime', sortAsc = false;
 const detailCache = {};
 
 /* ============================================================
@@ -226,6 +226,7 @@ function colorWrap(text) {
 function getSort(key) {
   const map = {
     '_date': d => d.date_raw,
+    '_datetime': d => `${d.date_raw || ''}_${normTime(d.time)}`,
     'code': d => d.code,
     'rev_chg': d => d.rev_chg,
     'op_cur': d => d.op_cur,
@@ -238,11 +239,17 @@ function getSort(key) {
   return map[key] || (d => d.date_raw);
 }
 
+function normTime(t) {
+  const m = String(t || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '00:00';
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
 function compare(a, b) {
   if (a === null || a === undefined) return 1;
   if (b === null || b === undefined) return -1;
   if (typeof a === 'number' && typeof b === 'number') return a - b;
-  return String(a).localeCompare(String(b));
+  return String(a).localeCompare(String(b), 'en', {numeric: true});
 }
 
 function filterAndSort() {
@@ -254,9 +261,19 @@ function filterAndSort() {
     (r.company || '').toLowerCase().includes(search) ||
     (r.code || '').toLowerCase().includes(search) ||
     (r.title || '').toLowerCase().includes(search));
-  const fn = getSort(sortCol);
+
+  // 既定: 日付→時刻（新しい順）のあとコード昇順。他列ソート時も同値はコードで安定化。
   d.sort((a, b) => {
-    const r = compare(fn(a), fn(b));
+    if (sortCol === '_datetime') {
+      let r = compare(a.date_raw, b.date_raw);
+      if (r !== 0) return sortAsc ? r : -r;
+      r = compare(normTime(a.time), normTime(b.time));
+      if (r !== 0) return sortAsc ? r : -r;
+      return compare(a.code, b.code);
+    }
+    let r = compare(getSort(sortCol)(a), getSort(sortCol)(b));
+    if (r === 0) r = compare(a.code, b.code);
+    if (r === 0) r = compare(normTime(a.time), normTime(b.time));
     return sortAsc ? r : -r;
   });
   return d;
@@ -281,7 +298,7 @@ function renderTable() {
   const tbody = document.getElementById('tbody');
   tbody.innerHTML = rows.map((r, i) =>
     `<tr>
-      <td class="date-cell">${r.date}</td>
+      <td class="date-cell">${fmtDateTime(r)}</td>
       <td class="code-cell">${r.code}</td>
       <td><span class="company-link" data-idx="${i}" data-detail="${r.detail}">${r.company}</span></td>
       <td class="title-cell">${r.pdf_url ? `<a href="${r.pdf_url}" target="_blank" class="pdf-link">${escapeHtml(r.title)}</a>` : escapeHtml(r.title)}</td>
@@ -306,6 +323,11 @@ function renderTable() {
   const selVal = sortCol + '_' + (sortAsc ? 'asc' : 'desc');
   const sel = document.getElementById('sortSelect');
   if (sel.querySelector(`option[value="${selVal}"]`)) sel.value = selVal;
+}
+
+function fmtDateTime(r) {
+  const t = String(r.time || '').trim();
+  return t ? `${r.date} ${t}` : r.date;
 }
 
 function escapeHtml(s) {

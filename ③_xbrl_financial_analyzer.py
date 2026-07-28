@@ -900,6 +900,7 @@ def export_to_excel(
         ("コード", company_info.get("code", "")),
         ("表題", company_info.get("title", "")),
         ("日付", company_info.get("date", "")),
+        ("時刻", company_info.get("time", "")),
     ]
     for i, (key, val) in enumerate(info_items, 1):
         ws1.cell(row=i, column=1, value=key).font = Font(bold=True)
@@ -1219,6 +1220,7 @@ def main():
                     "name": name,
                     "title": title,
                     "date": target_date_str,
+                    "time": entry.get("time", ""),
                     "file_suffix": file_suffix,
                 }
                 process_single_xbrl(zip_path, company_info, args.threshold, day_dir)
