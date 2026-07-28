@@ -44,6 +44,8 @@ td.nm{text-align:right;font-variant-numeric:tabular-nums;font-family:Consolas,Me
 .company-link:hover{color:#e94560;text-decoration:underline}
 .date-cell{color:#8899aa;white-space:nowrap}
 .code-cell{font-weight:600}
+.code-link{color:#53b8f0;font-weight:600;text-decoration:none}
+.code-link:hover{color:#e94560;text-decoration:underline}
 .title-cell{color:#b0b0c0;font-size:12px}
 .pdf-link{color:#b0b0c0;text-decoration:none;border-bottom:1px dotted #666}
 .pdf-link:hover{color:#53b8f0;border-bottom-color:#53b8f0}
@@ -299,7 +301,7 @@ function renderTable() {
   tbody.innerHTML = rows.map((r, i) =>
     `<tr>
       <td class="date-cell">${fmtDateTime(r)}</td>
-      <td class="code-cell">${r.code}</td>
+      <td class="code-cell"><a class="code-link" href="https://finance.yahoo.co.jp/quote/${encodeURIComponent(r.code)}.T" target="_blank" rel="noopener noreferrer">${r.code}</a></td>
       <td><span class="company-link" data-idx="${i}" data-detail="${r.detail}">${r.company}</span></td>
       <td class="title-cell">${r.pdf_url ? `<a href="${r.pdf_url}" target="_blank" class="pdf-link">${escapeHtml(r.title)}</a>` : escapeHtml(r.title)}</td>
       <td class="nm">${fmtMargin1(r.rev_chg, '%')}</td>
